@@ -1,0 +1,21 @@
+[package]
+name = "particle_system"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy-inspector-egui = "0.31.0"
+bytemuck = "1.23.1"
+rand = "0.9.1"
+
+
+[dependencies.bevy]
+version = "0.16"
+default-features = false
+features = [
+  "bevy_core_pipeline",
+  "bevy_render",
+  "bevy_asset",
+  "bevy_log",
+  "bevy_winit",
+]
