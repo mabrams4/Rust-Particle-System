@@ -10,6 +10,7 @@ use bevy::{
         RenderApp, RenderSet,
     },
 };
+
 use crate::{ParticleConfig, ParticleSystem};
 use crate::particle_render::{ParticleRenderNode, ParticleRenderLabel, ParticleRenderPipeline, 
     prepare_particles};
@@ -36,6 +37,7 @@ impl Plugin for ParticlePlugin
         app.add_plugins(ExtractResourcePlugin::<ParticleConfig>::default());
 
         // get render app
+
         let render_app = app.sub_app_mut(RenderApp);
         
         render_app.add_systems(Render, prepare_particles.in_set(RenderSet::Prepare));
@@ -54,14 +56,15 @@ impl Plugin for ParticlePlugin
         render_graph.add_node_edge(ParticleComputeLabel, ParticleRenderLabel);
         render_graph.add_node_edge(ParticleRenderLabel, CameraDriverLabel);
 
-        info!("[S] Build for ParticlePlugin complete");
+        info!("[Setup] Build for ParticlePlugin complete");
     }
 
     fn finish(&self, app: &mut App) {
         let render_app = app.sub_app_mut(RenderApp);
         // insert Custom Particle Pipelines into render world
         render_app.init_resource::<ParticleComputePipeline>();
+        info!("[Setup] Added ParticleComputePipeline resource to render app");
         render_app.init_resource::<ParticleRenderPipeline>();
-        info!("[S] Added ParticleRenderPipeline resource to render app");
+        info!("[Setup] Added ParticleRenderPipeline resource to render app");
     }
 }

@@ -4,7 +4,6 @@ use bevy::{
         render_graph::{self, Node, RenderGraphContext, RenderLabel}, 
         render_resource::*, 
         renderer::{RenderContext, RenderDevice},
-        view::{ExtractedView, ViewTarget, Msaa},
     },
 };
 
@@ -12,6 +11,7 @@ use crate::{particle_compute::render_graph::NodeRunError, ParticleConfig};
 use crate::ParticleSystem;
 use crate::particle::Particle;
 use crate::particle_render::PreparedParticleBuffer;
+use crate::util::{get_bind_group_layout, get_compute_pipeline_descriptor};
 
 const WORKGROUP_SIZE: u32 = 16;
 
@@ -21,7 +21,6 @@ pub struct ParticleComputeLabel;
 #[derive(Resource)]
 pub struct ParticleComputePipeline 
 {
-    bind_group_layout: BindGroupLayout,
     compute_pipeline_id: CachedComputePipelineId,
 }
 
@@ -37,53 +36,20 @@ impl FromWorld for ParticleComputePipeline
         let shader_handle = world.resource::<AssetServer>().load("compute_shader.wgsl");
         
         // create the bind group layout
-        let bind_group_layout = render_device.create_bind_group_layout(
-            "bind_group_layout",
-            &[BindGroupLayoutEntry
-            {
-                binding: 0,
-                visibility: ShaderStages::VERTEX,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None
-            },
-            BindGroupLayoutEntry
-            {
-                binding: 1,
-                visibility: ShaderStages::VERTEX,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None
-            }
-            ]
-        );
-
-        info!("[S-Compute] created bind group layout");
+        let bind_group_layout = get_bind_group_layout(render_device);
 
         // create the render pipeline and store it in the pipeline cache
         let pipeline_cache = world.resource_mut::<PipelineCache>();
 
-        let compute_pipeline_id = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor 
-            {   label: Some("compute_pipeline_id".into()), 
-                layout: vec![bind_group_layout.clone()],
-                push_constant_ranges: vec![], 
-                shader: shader_handle.clone(), 
-                shader_defs: vec![], 
-                entry_point: "compute_main".into(), 
-                zero_initialize_workgroup_memory: false 
-            });
+        let compute_pipeline_id = pipeline_cache.queue_compute_pipeline(
+            get_compute_pipeline_descriptor(&bind_group_layout, &shader_handle)
+        );
         
-        info!("[S] created compute pipeline");
-        // return the ParticleRenderPipeline object
+        info!("[Setup] created compute pipeline");
+        
+        // return the ParticleComputePipeline object
         ParticleComputePipeline 
         {  
-            bind_group_layout,
             compute_pipeline_id
         }
     }
@@ -110,14 +76,17 @@ impl Node for ParticleComputeNode
             // check if pipeline is ready yet
             if let Some(pipeline_id) = pipeline_cache.get_compute_pipeline(pipeline.compute_pipeline_id)
             {
+                info!("[Compute Node] got compute pipeline");
                 //let particle_system = world.get::<ParticleSystem>(entity).unwrap();
-                let prepared_particle_buffer = world.get::<PreparedParticleBuffer>(entity).unwrap();
-                let mut pass = render_context.command_encoder().begin_compute_pass(&ComputePassDescriptor::default());
-                
-                pass.set_bind_group(0, &prepared_particle_buffer.bind_group, &[]);
-                pass.set_pipeline(pipeline_id);
-                pass.dispatch_workgroups(prepared_particle_buffer.num_particles / WORKGROUP_SIZE, 1, 1);
-
+                if let Some(prepared_particle_buffer) = world.get::<PreparedParticleBuffer>(entity)
+                {
+                    let mut pass = render_context.command_encoder().begin_compute_pass(&ComputePassDescriptor::default());
+                    
+                    pass.set_bind_group(0, &prepared_particle_buffer.bind_group, &[]);
+                    pass.set_pipeline(pipeline_id);
+                    pass.dispatch_workgroups(prepared_particle_buffer.num_particles / WORKGROUP_SIZE, 1, 1);
+                    info!("[Compute Node] dispatched workgroups!");
+                }
             }
         }
         Ok(())

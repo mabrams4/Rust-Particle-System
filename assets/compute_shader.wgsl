@@ -22,7 +22,7 @@ var<storage, read_write> particles: array<Particle>;
 var<uniform> config: Config;
 
 @compute @workgroup_size(16, 1, 1)
-fn init()
+fn compute_main()
 {
     
 }

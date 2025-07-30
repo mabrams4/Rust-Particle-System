@@ -17,6 +17,7 @@ use bytemuck::{Pod, Zeroable};
 mod particle;
 mod particle_render;
 mod particle_compute;
+mod util;
 use particle::Particle;
 
 
@@ -38,8 +39,8 @@ pub struct ParticleConfig {
 }
 
 const PARTICLE_COUNT: u32 = 1000;
-const PARTICLE_SIZE: f32 = 10.0;
-const PARTICLE_SPACING: f32 = 20.0;
+const PARTICLE_SIZE: f32 = 5.0;
+const PARTICLE_SPACING: f32 = 7.5;
 const GRAVITY: f32 = 100.0;
 
 fn main() 
@@ -99,7 +100,7 @@ fn setup(mut commands: Commands, particle_config: Res<ParticleConfig>)
         },
     );
     commands.spawn(Camera2d::default());
-    info!("[S] Spawned ParticleSystem in Main World");
+    info!("[Setup] Spawned ParticleSystem in Main World");
 }
 
 fn exit_on_escape(
