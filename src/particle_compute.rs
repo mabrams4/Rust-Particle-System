@@ -76,7 +76,7 @@ impl Node for ParticleComputeNode
             // check if pipeline is ready yet
             if let Some(pipeline_id) = pipeline_cache.get_compute_pipeline(pipeline.compute_pipeline_id)
             {
-                info!("[Compute Node] got compute pipeline");
+                //info!("[Compute Node] got compute pipeline");
                 //let particle_system = world.get::<ParticleSystem>(entity).unwrap();
                 if let Some(prepared_particle_buffer) = world.get::<PreparedParticleBuffer>(entity)
                 {
@@ -85,7 +85,7 @@ impl Node for ParticleComputeNode
                     pass.set_bind_group(0, &prepared_particle_buffer.bind_group, &[]);
                     pass.set_pipeline(pipeline_id);
                     pass.dispatch_workgroups(prepared_particle_buffer.num_particles / WORKGROUP_SIZE, 1, 1);
-                    info!("[Compute Node] dispatched workgroups!");
+                    //info!("[Compute Node] dispatched workgroups!");
                 }
             }
         }

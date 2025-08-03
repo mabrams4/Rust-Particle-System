@@ -1,18 +1,16 @@
 use bevy::{
     prelude::*,
-    //asset::RenderAssetUsages,
     render::{
         extract_component::ExtractComponent, 
         extract_resource::ExtractResource, 
-        //mesh::{Indices, PrimitiveTopology},
     },
+    window::WindowMode,
 };
+use rand::prelude::*;
+use rand_distr::{Distribution, Normal};
 use bytemuck::{Pod, Zeroable};
 
-// use bevy_inspector_egui::{
-//     bevy_egui::EguiPlugin,
-//     quick::WorldInspectorPlugin,
-// };
+
 
 mod particle;
 mod particle_render;
@@ -20,87 +18,161 @@ mod particle_compute;
 mod util;
 use particle::Particle;
 
-
-
 #[derive(ExtractComponent, Component, Default, Clone)]
 pub struct ParticleSystem {
     pub particles: Vec<Particle>,
-    //pub mesh_handle: Handle<Mesh>,
 }
 
 #[repr(C)]
 #[derive(ExtractResource, Resource, Default, Clone, Copy, Zeroable, Pod)]
 pub struct ParticleConfig {
-    pub particle_count: u32,
-    pub particle_size: f32,
-    pub delta_time: f32,
-    pub gravity: f32,
-    pub view_proj: [[f32; 4]; 4],
+    pub particle_count: u32,            // 4 bytes
+    pub particle_size: f32,             // 4 bytes
+    pub delta_time: f32,                // 4 bytes
+    pub gravity: f32,                   // 4 bytes
+
+    pub inflow_vel: f32,                // 4 bytes
+    pub vertical_jitter: f32,           // 4 bytes
+    pub air_density: f32,               // 4 bytes
+    pub air_viscosity: f32,             // 4 bytes
+    pub pressure_gradient: [f32; 2],    // 8 bytes
+
+    pub padding: [f32; 2],              // 8 bytes
+
+    pub screen_bounds: [f32; 4],        // 16 bytes     [x_min, x_max, y_min, y_max]
+    pub view_proj: [[f32; 4]; 4],       // 64 bytes
+    pub padding2: [f32; 4],
 }
 
-const PARTICLE_COUNT: u32 = 1000;
-const PARTICLE_SIZE: f32 = 5.0;
-const PARTICLE_SPACING: f32 = 7.5;
-const GRAVITY: f32 = 100.0;
+const PARTICLE_COUNT: u32 = 50000;
+const PARTICLE_SIZE: f32 = 2.0;
+const GRAVITY: f32 = -0.0;
+const COMPUTE_SHADER_DELAY: u32 = 3;
+const INFLOW_VEL: f32 = 100.0;
+const VERTICAL_JITTER: f32 = 5.0;
+const AIR_DENSITY: f32 = 0.0;
+const AIR_VISCOSITY: f32 = 0.0;
+const MAX_ENERGY: f32 = 10000.0;
+const PRESSURE_GRADIENT: [f32; 2] = [0.0, 0.0];
+
+const RANDOM_INIT_X_ACCEL: f32 = 10.0;
 
 fn main() 
 {
     App::new()
-    .add_plugins(DefaultPlugins)
-    //.add_plugins(EguiPlugin { enable_multipass_for_primary_context: true })
-    //.add_plugins(WorldInspectorPlugin::new())
-
+    .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                mode: WindowMode::BorderlessFullscreen(MonitorSelection::Current),
+                ..default()
+            }),
+            ..default()
+        }))
     .add_plugins(particle::ParticlePlugin)
 
     .insert_resource(ParticleConfig {
         particle_count: PARTICLE_COUNT,
         particle_size: PARTICLE_SIZE,
-        view_proj: Mat4::IDENTITY.to_cols_array_2d(),
         delta_time: 0.0,
-        gravity: GRAVITY
+        gravity: GRAVITY,
+
+        inflow_vel: INFLOW_VEL,
+        vertical_jitter: VERTICAL_JITTER,
+        air_density: AIR_DENSITY,
+        air_viscosity: AIR_VISCOSITY,
+        pressure_gradient: PRESSURE_GRADIENT,
+        padding: [0.0, 0.0],
+
+        screen_bounds: [0.0; 4],
+        view_proj: Mat4::IDENTITY.to_cols_array_2d(),
+        padding2: [1.0, 0.0, 0.0, 1.0],
     })
 
-    .add_systems(Startup, setup)
+    .add_systems(Startup, setup_camera)
+    .add_systems(Update, setup_particles)
     .add_systems(Update, exit_on_escape)
     .run();
 }
 
-fn setup(mut commands: Commands, particle_config: Res<ParticleConfig>)
+fn get_screen_bounds(
+    camera_query: &Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+) -> Option<[f32; 4]> 
 {
-    let total_particles = particle_config.particle_count;
-    let grid_width = (total_particles as f32).sqrt().ceil() as u32;
-    let grid_height = (total_particles as f32 / grid_width as f32).ceil() as u32;
+    let (camera, transform) = camera_query.single().ok()?;
+    let viewport_size = camera.logical_viewport_size()?;
 
-    let spacing = PARTICLE_SPACING; // adjust as needed
-    let half_width = (grid_width as f32 - 1.0) * spacing / 2.0;
-    let half_height = (grid_height as f32 - 1.0) * spacing / 2.0;
-    let mut particles = Vec::with_capacity(total_particles as usize);
-    for row in 0..grid_height {
-        for col in 0..grid_width {
-            if particles.len() >= total_particles as usize {
-                break;
-            }
+    let center = transform.translation().truncate();
+    let half_width = viewport_size.x / 2.0;
+    let half_height = viewport_size.y / 2.0;
 
-            let x = col as f32 * spacing - half_width;
-            let y = row as f32 * spacing - half_height;
+    Some([
+        center.x - half_width, // x_min
+        center.x + half_width, // x_max
+        center.y - half_height, // y_min
+        center.y + half_height, // y_max
+    ])
+}
+
+fn setup_camera(mut commands : Commands)
+{
+    commands.spawn(Camera2d::default());
+}
+
+fn setup_particles(
+    mut commands: Commands,
+    mut particle_config: ResMut<ParticleConfig>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    mut ran: Local<bool>
+) {
+    if !*ran
+    {
+        *ran = true;
+
+        let total_particles = particle_config.particle_count;
+
+        // Get and store screen bounds
+        if let Some(bounds) = get_screen_bounds(&camera_query) {
+            particle_config.screen_bounds = bounds;
+            info!("[Setup] Screen bounds set to: {:?}", bounds);
+        } else {
+            warn!("[Setup] Failed to retrieve screen bounds from camera query");
+            return; // Exit setup early if bounds are unavailable
+        }
+        let [x_min, x_max, y_min, y_max] = particle_config.screen_bounds;
+        let mut rng = rand::rng();
+
+        // Y-distribution: mean at center
+        let y_center = (y_min + y_max) / 2.0;
+        let y_std_dev = (y_max - y_min) * 0.125;
+        let y_dist = Normal::new(y_center, y_std_dev).unwrap();
+
+        let mut particles = Vec::with_capacity(total_particles as usize);
+
+        for i in 0..total_particles {
+            // Uniformly distribute x across visible width
+            let t = i as f32 / total_particles as f32;
+            let x = x_min + t * (x_max - x_min);
+            // Sample y and clamp to bounds
+            let mut y = y_dist.sample(&mut rng);
+            y = y.clamp(y_min, y_max);
+
+            // Small vertical velocity jitter
+            let y_velocity = rng.random_range(-VERTICAL_JITTER..VERTICAL_JITTER);
+            let x_accel = rng.random_range(0.0..RANDOM_INIT_X_ACCEL);
+
             particles.push(Particle {
                 position: [x, y],
-                velocity: [0.0, 0.0],
-                acceleration: [0.0, -GRAVITY],
-                temp1: 0.0,
+                velocity: [INFLOW_VEL, y_velocity], // rightward + small variation
+                acceleration: [x_accel, particle_config.gravity],
+                compute_shader_delay: COMPUTE_SHADER_DELAY,
                 temp2: 0.0,
                 color: [1.0, 1.0, 1.0, 1.0],
             });
         }
+
+        // Spawn particle system and camera
+        commands.spawn(ParticleSystem { particles });
+        info!("[Setup] Spawned {} particles in ParticleSystem", total_particles);
     }
-    commands.spawn(
-        ParticleSystem {
-            particles: particles,
-            //mesh_handle: mesh_handle,
-        },
-    );
-    commands.spawn(Camera2d::default());
-    info!("[Setup] Spawned ParticleSystem in Main World");
 }
 
 fn exit_on_escape(

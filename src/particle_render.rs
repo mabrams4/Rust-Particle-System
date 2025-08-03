@@ -8,7 +8,7 @@ use bevy::{
     },
 };
 
-use crate::{particle_render::render_graph::NodeRunError, ParticleConfig};
+use crate::{get_screen_bounds, particle_render::render_graph::NodeRunError, ParticleConfig};
 use crate::ParticleSystem;
 use crate::particle::Particle;
 use crate::util::{get_bind_group_layout, get_render_pipeline_descriptor};
@@ -234,17 +234,17 @@ pub fn prepare_particles(
     }
     else 
     {
-        info!("updating particle buffers");
+        //info!("updating particle buffers");
         // Update view_proj from camera
         if let Ok(view) = camera_query.single() {
             let view_matrix = view.world_from_view.compute_matrix().inverse();
             let view_proj = view.clip_from_view * view_matrix;
             config.view_proj = view_proj.to_cols_array_2d();
         }
-
+        
+        //info!("screen bounds: {}, {}", config.screen_bounds[0], config.screen_bounds[1]);
         // Update time delta
         config.delta_time = time.delta().as_secs_f32();
-
         // Update the uniform buffer on the GPU
         if let Ok(prepared_particles) = particle_buffers_query.single() {
             render_queue.write_buffer(

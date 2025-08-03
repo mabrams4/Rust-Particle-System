@@ -1,16 +1,27 @@
 struct Config {
-    particle_count: u32,    // 4 bytes
-    particle_size: f32,     // 4 bytes
-    delta_time: f32,        // 4 bytes
-    gravity: f32,           // 4 bytes
-    view_proj: mat4x4<f32>, // 64 bytes
-}
+    particle_count: u32,            // 4 bytes
+    particle_size: f32,             // 4 bytes
+    delta_time: f32,                // 4 bytes
+    gravity: f32,                   // 4 bytes
+
+    inflow_vel: f32,                // 4 bytes
+    vertical_jitter: f32,           // 4 bytes
+    air_density: f32,               // 4 bytes
+    air_viscosity: f32,             // 4 bytes
+
+    pressure_gradient: vec2<f32>,   // 8 bytes
+    padding: vec2<f32>,             // 8 bytes (ensures 16-byte alignment)
+
+    screen_bounds: vec4<f32>,       // 16 bytes
+    view_proj: mat4x4<f32>,         // 64 bytes
+    padding2: vec4<f32>,
+};
 
 struct Particle {
     position: vec2<f32>,
     velocity: vec2<f32>,
     acceleration: vec2<f32>,
-    temp1: f32,
+    compute_shader_delay: u32,
     temp2: f32,
     color: vec4<f32>,
 }
@@ -83,5 +94,5 @@ fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32>
         discard;
     }
 
-    return vec4<f32>(1.0, 0.8, 0.3, alpha); // orange-ish glowing circle
+    return input.color; // orange-ish glowing circle
 }
