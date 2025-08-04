@@ -10,8 +10,6 @@ use rand::prelude::*;
 use rand_distr::{Distribution, Normal};
 use bytemuck::{Pod, Zeroable};
 
-
-
 mod particle;
 mod particle_render;
 mod particle_compute;
@@ -41,21 +39,24 @@ pub struct ParticleConfig {
 
     pub screen_bounds: [f32; 4],        // 16 bytes     [x_min, x_max, y_min, y_max]
     pub view_proj: [[f32; 4]; 4],       // 64 bytes
-    pub padding2: [f32; 4],
+    pub max_energy: f32,
+    pub temp2: f32,
+    pub temp3: f32,
+    pub temp4: f32,
 }
 
-const PARTICLE_COUNT: u32 = 50000;
-const PARTICLE_SIZE: f32 = 2.0;
-const GRAVITY: f32 = -0.0;
+const PARTICLE_COUNT: u32 = 10000;
+const PARTICLE_SIZE: f32 = 3.0;
+const GRAVITY: f32 = -100.0;
 const COMPUTE_SHADER_DELAY: u32 = 3;
-const INFLOW_VEL: f32 = 100.0;
-const VERTICAL_JITTER: f32 = 5.0;
+const INFLOW_VEL: f32 = 0.0;
+const VERTICAL_JITTER: f32 = 0.1;
 const AIR_DENSITY: f32 = 0.0;
 const AIR_VISCOSITY: f32 = 0.0;
-const MAX_ENERGY: f32 = 10000.0;
+const MAX_ENERGY: f32 = 750000.0;
 const PRESSURE_GRADIENT: [f32; 2] = [0.0, 0.0];
 
-const RANDOM_INIT_X_ACCEL: f32 = 10.0;
+const RANDOM_INIT_X_ACCEL: f32 = 0.1;
 
 fn main() 
 {
@@ -84,7 +85,10 @@ fn main()
 
         screen_bounds: [0.0; 4],
         view_proj: Mat4::IDENTITY.to_cols_array_2d(),
-        padding2: [1.0, 0.0, 0.0, 1.0],
+        max_energy: MAX_ENERGY,
+        temp2: 0.0,
+        temp3: 0.0,
+        temp4: 0.0,
     })
 
     .add_systems(Startup, setup_camera)

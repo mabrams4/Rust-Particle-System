@@ -14,7 +14,10 @@ struct Config {
 
     screen_bounds: vec4<f32>,       // 16 bytes
     view_proj: mat4x4<f32>,         // 64 bytes
-    padding2: vec4<f32>,
+    max_energy: f32,
+    temp2: f32,
+    temp3: f32,
+    temp4: f32,
 };
 
 struct Particle {
@@ -45,14 +48,31 @@ fn compute_main(@builtin(global_invocation_id) id: vec3<u32>) {
         return;
     }
 
+    
+
+    // Recycle particle to left if off-screen
+    // if (particles[i].position.x > config.screen_bounds[1]) {
+    //     particles[i].position.x = config.screen_bounds[0];
+    // }
+
+    // Screen Bounds check
+    let damping_Factor = 0.7;
+    let x_min = config.screen_bounds[0];
+    let x_max = config.screen_bounds[1];
+    let y_min = config.screen_bounds[2];
+    let y_max = config.screen_bounds[3];
+    if (particles[i].position.x > x_max || particles[i].position.x < x_min)
+    {
+        particles[i].velocity.x *= -1 * damping_Factor;
+    }
+    if (particles[i].position.y > y_max || particles[i].position.y < y_min)
+    {
+        particles[i].velocity.y *= -1 * damping_Factor;
+    }
+
     // Update particle position and velocity
     particles[i].position += particles[i].velocity * config.delta_time;
     particles[i].velocity += particles[i].acceleration * config.delta_time;
-
-    // Recycle particle to left if off-screen
-    if (particles[i].position.x > config.screen_bounds[1]) {
-        particles[i].position.x = config.screen_bounds[0];
-    }
 
     // === Color Based on Kinetic Energy ===
 
@@ -60,8 +80,7 @@ fn compute_main(@builtin(global_invocation_id) id: vec3<u32>) {
     let speed_sq = dot(particles[i].velocity, particles[i].velocity);
     let energy = 0.5 * mass * speed_sq;
 
-    let max_energy = 10000.0;
-    let normalized = clamp(energy / max_energy, 0.0, 1.0);
+    let normalized = clamp(energy / config.max_energy, 0.0, 1.0);
 
     var rgb: vec3<f32>;
     if (normalized < 0.5) {

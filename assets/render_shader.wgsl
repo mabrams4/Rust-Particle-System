@@ -14,7 +14,10 @@ struct Config {
 
     screen_bounds: vec4<f32>,       // 16 bytes
     view_proj: mat4x4<f32>,         // 64 bytes
-    padding2: vec4<f32>,
+    max_energy: f32,
+    temp2: f32,
+    temp3: f32,
+    temp4: f32,
 };
 
 struct Particle {
