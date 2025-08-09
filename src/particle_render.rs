@@ -8,21 +8,21 @@ use bevy::{
     },
 };
 
-use crate::{get_screen_bounds, particle_render::render_graph::NodeRunError, ParticleConfig};
+use crate::{particle_render::render_graph::NodeRunError, ParticleConfig};
 use crate::ParticleSystem;
 use crate::particle::Particle;
-use crate::util::{get_bind_group_layout, get_render_pipeline_descriptor};
+use crate::util::{get_bind_group_layout, get_bind_group, get_render_pipeline_descriptor};
 
 #[derive(RenderLabel, Hash, Debug, Eq, PartialEq, Clone)]
 pub struct ParticleRenderLabel;
 
 #[derive(Component)]
-pub struct PreparedParticleBuffer {
-    pub num_particles: u32,
+pub struct GPUPipelineBuffers {
     pub bind_group: BindGroup,  // shared between vertex and compute shaders
     pub vertex_buffer: Buffer,
-    pub storage_buffer: Buffer,
-    pub uniform_buffer: Buffer,
+    pub config_buffer: Buffer,
+    //pub spatial_lookup_buffer: Buffer,
+    //pub grid_start_idxs_buffer: Buffer,
 }
 
 #[derive(Resource)]
@@ -51,7 +51,6 @@ impl FromWorld for ParticleRenderPipeline
         let render_pipeline_id = pipeline_cache.queue_render_pipeline(
             get_render_pipeline_descriptor(&bind_group_layout, &shader_handle)
         );
-        info!("[Setup] created render pipeline");
         // return the ParticleRenderPipeline object
         ParticleRenderPipeline 
         {  
@@ -63,7 +62,6 @@ impl FromWorld for ParticleRenderPipeline
 
 pub struct ParticleRenderNode 
 {
-    //view_query: QueryState<(&'static ExtractedView, &'static ViewTarget)>,
     view_query: QueryState<&'static ViewTarget>,
     particle_system: QueryState<Entity, With<ParticleSystem>>,
 }
@@ -79,15 +77,17 @@ impl Node for ParticleRenderNode
     {
         let pipeline_cache = world.resource::<PipelineCache>();
         let pipeline = world.resource::<ParticleRenderPipeline>();
+        let config = world.resource::<ParticleConfig>();
+
         for target in self.view_query.iter_manual(world) 
         {
             for entity in self.particle_system.iter_manual(world)
             {
                 // check if pipeline is ready yet
-                if let Some(pipeline_id) = pipeline_cache.get_render_pipeline(pipeline.render_pipeline_id)
+                if let Some(render_pipeline_id) = pipeline_cache.get_render_pipeline(pipeline.render_pipeline_id)
                 {
                     //let particle_system = world.get::<ParticleSystem>(entity).unwrap();
-                    if let Some(prepared_particle_buffer) = world.get::<PreparedParticleBuffer>(entity)
+                    if let Some(render_pipeline_buffers) = world.get::<GPUPipelineBuffers>(entity)
                     {
                         let mut render_pass = RenderContext::begin_tracked_render_pass(
                         render_context, 
@@ -100,12 +100,11 @@ impl Node for ParticleRenderNode
                                 occlusion_query_set: None
                             }
                         );
-                        render_pass.set_render_pipeline(pipeline_id);
-                        render_pass.set_bind_group(0, &prepared_particle_buffer.bind_group, &[]);
-                        render_pass.set_vertex_buffer(0, prepared_particle_buffer.vertex_buffer.slice(..));
-                        render_pass.draw(0..6, 0..prepared_particle_buffer.num_particles as u32);
+                        render_pass.set_render_pipeline(render_pipeline_id);
+                        render_pass.set_bind_group(0, &render_pipeline_buffers.bind_group, &[]);
+                        render_pass.set_vertex_buffer(0, render_pipeline_buffers.vertex_buffer.slice(..));
+                        render_pass.draw(0..6, 0..config.particle_count as u32);
                     }
-                    
                 }
             }
         }
@@ -129,11 +128,11 @@ impl ParticleRenderNode {
     }
 }
 
-pub fn prepare_particles(
+pub fn prepare_particle_buffers(
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     particle_system_query: Query<(Entity, &ParticleSystem)>,
-    particle_buffers_query: Query<&PreparedParticleBuffer>,
+    pipeline_buffers_query: Query<&GPUPipelineBuffers>,
     render_pipeline: Res<ParticleRenderPipeline>,
     mut config: ResMut<ParticleConfig>,
     camera_query: Query<&ExtractedView, With<Camera>>,
@@ -145,7 +144,6 @@ pub fn prepare_particles(
     if !*ran 
     {
         *ran = true;
-        info!("[Setup] Setting up particle buffers");
         if let Ok(view) = camera_query.single() {
             let view_matrix = view.world_from_view.compute_matrix().inverse();
             let view_proj = view.clip_from_view * view_matrix;
@@ -153,14 +151,15 @@ pub fn prepare_particles(
         }
         config.delta_time = time.delta().as_secs_f32();
 
-        let uniform_buffer = render_device.create_buffer(&BufferDescriptor {
+        let config_buffer = render_device.create_buffer(&BufferDescriptor {
             label: Some("uniform_buffer"),
             size: std::mem::size_of::<ParticleConfig>() as u64,
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
-        let uniform_buffer_size = uniform_buffer.size();
-        let uniform_buffer_size = std::num::NonZeroU64::new(uniform_buffer_size).unwrap();
+
+        let config_buffer_size = config_buffer.size();
+        let config_buffer_size = std::num::NonZeroU64::new(config_buffer_size).unwrap();
 
         if let Ok((entity, particle_system)) = particle_system_query.single() 
         {
@@ -170,39 +169,46 @@ pub fn prepare_particles(
             let mut buffer = encase::StorageBuffer::new(&mut byte_buffer);
             buffer.write(&particles).unwrap();
 
-            let storage_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor 
-                {   label: Some("storage_buffer"), 
-                    contents: buffer.into_inner(), 
-                    usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
-                });
-            let storage_buffer_size = (std::mem::size_of::<Particle>() * config.particle_count as usize) as u64;
-            let storage_buffer_size = std::num::NonZeroU64::new(storage_buffer_size).unwrap();
+            let particle_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {   
+                label: Some("storage_buffer"), 
+                contents: buffer.into_inner(), 
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+            });
 
-            let bind_group = render_device.create_bind_group(
-                "bind_group", 
-                &render_pipeline.bind_group_layout, 
-                &[
-                    BindGroupEntry 
-                    {
-                        binding: 0,
-                        resource: BindingResource::Buffer(BufferBinding 
-                            {   
-                                buffer: &storage_buffer, 
-                                offset: 0, 
-                                size: Some(storage_buffer_size)
-                            })
-                    },
-                    BindGroupEntry 
-                    {
-                        binding: 1,
-                        resource: BindingResource::Buffer(BufferBinding 
-                            {   
-                                buffer: &uniform_buffer, 
-                                offset: 0, 
-                                size: Some(uniform_buffer_size)
-                            })
-                    }
-                ]);
+            let particle_buffer_size = (std::mem::size_of::<Particle>() * config.particle_count as usize) as u64;
+            let particle_buffer_size = std::num::NonZeroU64::new(particle_buffer_size).unwrap();
+
+            let spatial_lookup_buffer = render_device.create_buffer(&BufferDescriptor {
+                label: Some("grid_metadata_buffer"),
+                size: (std::mem::size_of::<u32>() * 2 * config.particle_count as usize) as u64,
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+            let spatial_lookup_buffer_size = spatial_lookup_buffer.size();
+            let spatial_lookup_buffer_size = std::num::NonZeroU64::new(spatial_lookup_buffer_size).unwrap();
+
+            let grid_start_idxs_buffer = render_device.create_buffer(&BufferDescriptor {
+                label: Some("other_buffer"),
+                size: (std::mem::size_of::<u32>() * config.particle_count as usize) as u64,
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+            let grid_start_idxs_buffer_size = grid_start_idxs_buffer.size();
+            let grid_start_idxs_buffer_size = std::num::NonZeroU64::new(grid_start_idxs_buffer_size).unwrap();
+
+            let bind_group = get_bind_group(
+                "bind_group0",
+                &render_device,
+                &render_pipeline.bind_group_layout,
+                &particle_buffer,
+                particle_buffer_size,
+                &config_buffer,
+                config_buffer_size,
+                &spatial_lookup_buffer,
+                spatial_lookup_buffer_size,
+                &grid_start_idxs_buffer,
+                grid_start_idxs_buffer_size
+            );
 
             let quad_vertices: &[f32; 24] = &[
                 // x,    y,    u,    v
@@ -221,34 +227,32 @@ pub fn prepare_particles(
                 usage: BufferUsages::VERTEX,
             });
             
-            commands.entity(entity).insert(PreparedParticleBuffer 
+            commands.entity(entity).insert(GPUPipelineBuffers 
                 {
                     bind_group: bind_group,
-                    num_particles: config.particle_count,
                     vertex_buffer: vertex_buffer,
-                    storage_buffer: storage_buffer,
-                    uniform_buffer: uniform_buffer
+                    config_buffer: config_buffer,
+                    //spatial_lookup_buffer: spatial_lookup_buffer,
+                    //grid_start_idxs_buffer: grid_start_idxs_buffer
                 });
         }
-        info!("[Setup] initialized all buffers for GPU");
     }
     else 
     {
-        //info!("updating particle buffers");
         // Update view_proj from camera
-        if let Ok(view) = camera_query.single() {
-            let view_matrix = view.world_from_view.compute_matrix().inverse();
-            let view_proj = view.clip_from_view * view_matrix;
-            config.view_proj = view_proj.to_cols_array_2d();
-        }
+        // if let Ok(view) = camera_query.single() {
+        //     let view_matrix = view.world_from_view.compute_matrix().inverse();
+        //     let view_proj = view.clip_from_view * view_matrix;
+        //     config.view_proj = view_proj.to_cols_array_2d();
+        // }
         
-        //info!("screen bounds: {}, {}", config.screen_bounds[0], config.screen_bounds[1]);
         // Update time delta
         config.delta_time = time.delta().as_secs_f32();
+        
         // Update the uniform buffer on the GPU
-        if let Ok(prepared_particles) = particle_buffers_query.single() {
+        if let Ok(render_particle_buffers) = pipeline_buffers_query.single() {
             render_queue.write_buffer(
-                &prepared_particles.uniform_buffer,
+                &render_particle_buffers.config_buffer,
                 0,
                 bytemuck::bytes_of(config.as_ref()),
             );

@@ -6,12 +6,14 @@ use bevy::{
         view::Msaa,
     },
 };
+use std::borrow::Cow;
 
+// returns the bind group layout for group 0 (used by render shader and main compute shader)
 pub fn get_bind_group_layout(render_device: &RenderDevice) -> BindGroupLayout
 {
     // create the bind group layout
     render_device.create_bind_group_layout(
-        "bind_group_layout",
+        "bind_group_layout0",
         &[BindGroupLayoutEntry
         {
             binding: 0,
@@ -33,11 +35,96 @@ pub fn get_bind_group_layout(render_device: &RenderDevice) -> BindGroupLayout
                 min_binding_size: None,
             },
             count: None
+        },
+        BindGroupLayoutEntry
+        {
+            binding: 2,
+            visibility: ShaderStages::VERTEX | ShaderStages::COMPUTE,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Storage { read_only: false },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None
+        },
+        BindGroupLayoutEntry
+        {
+            binding: 3,
+            visibility: ShaderStages::VERTEX | ShaderStages::COMPUTE,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Storage { read_only: false },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None
         }
         ]
     )
 }
 
+// returns bind group for group 0
+pub fn get_bind_group(
+    label: &str,
+    render_device: &RenderDevice,
+    bind_group_layout: &BindGroupLayout,
+    particle_buffer: &Buffer,
+    particle_buffer_size: std::num::NonZeroU64,
+    config_buffer: &Buffer,
+    config_buffer_size: std::num::NonZeroU64,
+    spatial_lookup_buffer: &Buffer,
+    spatial_lookup_buffer_size: std::num::NonZeroU64,
+    grid_start_idxs_buffer: &Buffer,
+    grid_start_idxs_buffer_size: std::num::NonZeroU64,
+) -> BindGroup
+{
+    render_device.create_bind_group(
+    label, 
+    bind_group_layout, 
+    &[
+        BindGroupEntry 
+        {
+            binding: 0,
+            resource: BindingResource::Buffer(BufferBinding 
+                {   
+                    buffer: &particle_buffer, 
+                    offset: 0, 
+                    size: Some(particle_buffer_size)
+                })
+        },
+        BindGroupEntry 
+        {
+            binding: 1,
+            resource: BindingResource::Buffer(BufferBinding 
+                {   
+                    buffer: &config_buffer, 
+                    offset: 0, 
+                    size: Some(config_buffer_size)
+                })
+        },
+        BindGroupEntry
+        {
+            binding: 2,
+            resource: BindingResource::Buffer(BufferBinding 
+                {   
+                    buffer: &spatial_lookup_buffer, 
+                    offset: 0, 
+                    size: Some(spatial_lookup_buffer_size)
+                })
+        },
+        BindGroupEntry
+        {
+            binding: 3,
+            resource: BindingResource::Buffer(BufferBinding 
+                {   
+                    buffer: &grid_start_idxs_buffer, 
+                    offset: 0, 
+                    size: Some(grid_start_idxs_buffer_size)
+                })
+        },
+    ])
+}
+
+// returns pipeline descriptor for render pipeline
 pub fn get_render_pipeline_descriptor(
     bind_group_layout: &BindGroupLayout,
     shader_handle: &Handle<Shader>) -> RenderPipelineDescriptor
@@ -103,18 +190,21 @@ pub fn get_render_pipeline_descriptor(
     }
 }
 
+// returns pipeline descriptor for compute pipeline
 pub fn get_compute_pipeline_descriptor(
     bind_group_layout: &BindGroupLayout,
-    shader_handle: &Handle<Shader>) -> ComputePipelineDescriptor
+    shader_handle: &Handle<Shader>,
+    entry_point: &str,
+) -> ComputePipelineDescriptor
 {
     ComputePipelineDescriptor 
     {   
-        label: Some("compute_pipeline_id".into()), 
+        label: None, 
         layout: vec![bind_group_layout.clone()],
         push_constant_ranges: vec![], 
         shader: shader_handle.clone(), 
         shader_defs: vec![], 
-        entry_point: "compute_main".into(), 
+        entry_point: Cow::from(entry_point.to_owned()), 
         zero_initialize_workgroup_memory: false 
     }
 }

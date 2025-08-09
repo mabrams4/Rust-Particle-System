@@ -7,7 +7,7 @@ use bevy::{
     window::WindowMode,
 };
 use rand::prelude::*;
-use rand_distr::{Distribution, Normal};
+//use rand_distr::{Distribution, Normal};
 use bytemuck::{Pod, Zeroable};
 
 mod particle;
@@ -15,6 +15,23 @@ mod particle_render;
 mod particle_compute;
 mod util;
 use particle::Particle;
+
+const PARTICLE_COUNT: u32 = 25000;
+const PARTICLE_SIZE: f32 = 3.0;
+const GRAVITY: f32 = 0.0;
+const COMPUTE_SHADER_DELAY: u32 = 3;
+const INFLOW_VEL: f32 = 0.0;
+const VERTICAL_JITTER: f32 = 0.1;
+const AIR_DENSITY: f32 = 0.0;
+const AIR_VISCOSITY: f32 = 0.0;
+const MAX_ENERGY: f32 = 20000.0;
+const PRESSURE_GRADIENT: [f32; 2] = [0.0, 0.0];
+
+//const RANDOM_INIT_X_ACCEL: f32 = 150.0;
+
+// TEST for exploding out of nowhere
+const MAX_INIT_VEL: f32 = 200.0;
+const MAX_INIT_ACCEL: f32 = 50.0;
 
 #[derive(ExtractComponent, Component, Default, Clone)]
 pub struct ParticleSystem {
@@ -40,34 +57,22 @@ pub struct ParticleConfig {
     pub screen_bounds: [f32; 4],        // 16 bytes     [x_min, x_max, y_min, y_max]
     pub view_proj: [[f32; 4]; 4],       // 64 bytes
     pub max_energy: f32,
-    pub temp2: f32,
-    pub temp3: f32,
+    pub smoothing_radius: f32,
+    pub grid_cell_size: u32,
     pub temp4: f32,
 }
-
-const PARTICLE_COUNT: u32 = 10000;
-const PARTICLE_SIZE: f32 = 3.0;
-const GRAVITY: f32 = -100.0;
-const COMPUTE_SHADER_DELAY: u32 = 3;
-const INFLOW_VEL: f32 = 0.0;
-const VERTICAL_JITTER: f32 = 0.1;
-const AIR_DENSITY: f32 = 0.0;
-const AIR_VISCOSITY: f32 = 0.0;
-const MAX_ENERGY: f32 = 750000.0;
-const PRESSURE_GRADIENT: [f32; 2] = [0.0, 0.0];
-
-const RANDOM_INIT_X_ACCEL: f32 = 0.1;
 
 fn main() 
 {
     App::new()
     .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                mode: WindowMode::BorderlessFullscreen(MonitorSelection::Current),
+                mode: WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
                 ..default()
             }),
             ..default()
         }))
+    //.add_plugins(DefaultPlugins)
     .add_plugins(particle::ParticlePlugin)
 
     .insert_resource(ParticleConfig {
@@ -86,8 +91,8 @@ fn main()
         screen_bounds: [0.0; 4],
         view_proj: Mat4::IDENTITY.to_cols_array_2d(),
         max_energy: MAX_ENERGY,
-        temp2: 0.0,
-        temp3: 0.0,
+        smoothing_radius: 0.0,
+        grid_cell_size: (PARTICLE_SIZE * 2.0) as u32,
         temp4: 0.0,
     })
 
@@ -136,37 +141,54 @@ fn setup_particles(
         // Get and store screen bounds
         if let Some(bounds) = get_screen_bounds(&camera_query) {
             particle_config.screen_bounds = bounds;
-            info!("[Setup] Screen bounds set to: {:?}", bounds);
         } else {
             warn!("[Setup] Failed to retrieve screen bounds from camera query");
             return; // Exit setup early if bounds are unavailable
         }
-        let [x_min, x_max, y_min, y_max] = particle_config.screen_bounds;
-        let mut rng = rand::rng();
+        // let [x_min, x_max, y_min, y_max] = particle_config.screen_bounds;
+        // let mut rng = rand::rng();
 
-        // Y-distribution: mean at center
-        let y_center = (y_min + y_max) / 2.0;
-        let y_std_dev = (y_max - y_min) * 0.125;
-        let y_dist = Normal::new(y_center, y_std_dev).unwrap();
+        // // Y-distribution: mean at center
+        // let y_center = (y_min + y_max) / 2.0;
+        // let y_std_dev = (y_max - y_min) * 0.125;
+        // let y_dist = Normal::new(y_center, y_std_dev).unwrap();
 
         let mut particles = Vec::with_capacity(total_particles as usize);
 
-        for i in 0..total_particles {
+        // for i in 0..total_particles {
+        for _ in 0..total_particles {
             // Uniformly distribute x across visible width
-            let t = i as f32 / total_particles as f32;
-            let x = x_min + t * (x_max - x_min);
-            // Sample y and clamp to bounds
-            let mut y = y_dist.sample(&mut rng);
-            y = y.clamp(y_min, y_max);
+            // let t = i as f32 / total_particles as f32;
+            // let x = x_min + t * (x_max - x_min);
+            // // Sample y and clamp to bounds
+            // let mut y = y_dist.sample(&mut rng);
+            // y = y.clamp(y_min, y_max);
 
-            // Small vertical velocity jitter
-            let y_velocity = rng.random_range(-VERTICAL_JITTER..VERTICAL_JITTER);
-            let x_accel = rng.random_range(0.0..RANDOM_INIT_X_ACCEL);
+            // // Small vertical velocity jitter
+            // let y_velocity = rng.random_range(-VERTICAL_JITTER..VERTICAL_JITTER);
+            // let x_accel = rng.random_range(-RANDOM_INIT_X_ACCEL..RANDOM_INIT_X_ACCEL);
+
+            // particles.push(Particle {
+            //     position: [x, y],
+            //     velocity: [INFLOW_VEL, y_velocity], // rightward + small variation
+            //     acceleration: [x_accel, particle_config.gravity],
+            //     compute_shader_delay: COMPUTE_SHADER_DELAY,
+            //     temp2: 0.0,
+            //     color: [1.0, 1.0, 1.0, 1.0],
+            // });
+
+            // TEST for exploding out of nowwhere
+            let mut rng = rand::rng();
+
+            let init_x_vel = rng.random_range(-MAX_INIT_VEL..MAX_INIT_VEL);
+            let init_y_vel = rng.random_range(-MAX_INIT_VEL..MAX_INIT_VEL);
+            let init_x_accel = rng.random_range(-MAX_INIT_ACCEL..MAX_INIT_ACCEL);
+            let init_y_accel = rng.random_range(-MAX_INIT_ACCEL..MAX_INIT_ACCEL);
 
             particles.push(Particle {
-                position: [x, y],
-                velocity: [INFLOW_VEL, y_velocity], // rightward + small variation
-                acceleration: [x_accel, particle_config.gravity],
+                position: [0.0, 0.0],
+                velocity: [init_x_vel, init_y_vel], // rightward + small variation
+                acceleration: [init_x_accel, init_y_accel],
                 compute_shader_delay: COMPUTE_SHADER_DELAY,
                 temp2: 0.0,
                 color: [1.0, 1.0, 1.0, 1.0],
@@ -175,7 +197,6 @@ fn setup_particles(
 
         // Spawn particle system and camera
         commands.spawn(ParticleSystem { particles });
-        info!("[Setup] Spawned {} particles in ParticleSystem", total_particles);
     }
 }
 
