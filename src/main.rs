@@ -14,9 +14,10 @@ mod particle;
 mod particle_render;
 mod particle_compute;
 mod util;
+mod debug;
 use particle::Particle;
 
-const PARTICLE_COUNT: u32 = 25000;
+const PARTICLE_COUNT: u32 = 100;
 const PARTICLE_SIZE: f32 = 3.0;
 const GRAVITY: f32 = 0.0;
 const COMPUTE_SHADER_DELAY: u32 = 3;
@@ -58,7 +59,7 @@ pub struct ParticleConfig {
     pub view_proj: [[f32; 4]; 4],       // 64 bytes
     pub max_energy: f32,
     pub smoothing_radius: f32,
-    pub grid_cell_size: u32,
+    pub temp3: f32,
     pub temp4: f32,
 }
 
@@ -91,8 +92,8 @@ fn main()
         screen_bounds: [0.0; 4],
         view_proj: Mat4::IDENTITY.to_cols_array_2d(),
         max_energy: MAX_ENERGY,
-        smoothing_radius: 0.0,
-        grid_cell_size: (PARTICLE_SIZE * 2.0) as u32,
+        smoothing_radius: 5.0 * PARTICLE_SIZE,  // Also our grid cell size
+        temp3: 0.0,
         temp4: 0.0,
     })
 

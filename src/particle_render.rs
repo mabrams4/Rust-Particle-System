@@ -10,18 +10,22 @@ use bevy::{
 
 use crate::{particle_render::render_graph::NodeRunError, ParticleConfig};
 use crate::ParticleSystem;
+use crate::{particle_compute::SortingParams};
 use crate::particle::Particle;
-use crate::util::{get_bind_group_layout, get_bind_group, get_render_pipeline_descriptor};
+use crate::util::{get_bind_group_layout, get_bind_group_normal, get_bind_group_swapped, get_render_pipeline_descriptor};
 
 #[derive(RenderLabel, Hash, Debug, Eq, PartialEq, Clone)]
 pub struct ParticleRenderLabel;
 
 #[derive(Component)]
 pub struct GPUPipelineBuffers {
-    pub bind_group: BindGroup,  // shared between vertex and compute shaders
+    pub bind_group_normal: BindGroup,  // shared between vertex and compute shaders
+    pub bind_group_swapped: BindGroup,  // ping pong bind group
     pub vertex_buffer: Buffer,
     pub config_buffer: Buffer,
-    //pub spatial_lookup_buffer: Buffer,
+    pub spatial_lookup_buffer: Buffer,
+    pub temp_sorting_buffer: Buffer,
+    pub sorting_params_buffer: Buffer,
     //pub grid_start_idxs_buffer: Buffer,
 }
 
@@ -75,6 +79,7 @@ impl Node for ParticleRenderNode
         world: &World,
     ) -> Result<(), NodeRunError> 
     {
+        //println!("Running Render Node");
         let pipeline_cache = world.resource::<PipelineCache>();
         let pipeline = world.resource::<ParticleRenderPipeline>();
         let config = world.resource::<ParticleConfig>();
@@ -101,7 +106,7 @@ impl Node for ParticleRenderNode
                             }
                         );
                         render_pass.set_render_pipeline(render_pipeline_id);
-                        render_pass.set_bind_group(0, &render_pipeline_buffers.bind_group, &[]);
+                        render_pass.set_bind_group(0, &render_pipeline_buffers.bind_group_normal, &[]);
                         render_pass.set_vertex_buffer(0, render_pipeline_buffers.vertex_buffer.slice(..));
                         render_pass.draw(0..6, 0..config.particle_count as u32);
                     }
@@ -187,8 +192,24 @@ pub fn prepare_particle_buffers(
             let spatial_lookup_buffer_size = spatial_lookup_buffer.size();
             let spatial_lookup_buffer_size = std::num::NonZeroU64::new(spatial_lookup_buffer_size).unwrap();
 
+            let temp_sorting_buffer = render_device.create_buffer(&BufferDescriptor {
+                label: Some("temp_sorting_buffer"),
+                size: (std::mem::size_of::<u32>() * 2 * config.particle_count as usize) as u64,
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+
+            let sorting_params_buffer = render_device.create_buffer(&BufferDescriptor {
+                label: Some("sorting_config_buffer"),
+                size: std::mem::size_of::<SortingParams>() as u64,
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+            let sorting_params_buffer_size = sorting_params_buffer.size();
+            let sorting_params_buffer_size = std::num::NonZeroU64::new(sorting_params_buffer_size).unwrap();
+
             let grid_start_idxs_buffer = render_device.create_buffer(&BufferDescriptor {
-                label: Some("other_buffer"),
+                label: Some("grid_start_idxs_buffer"),
                 size: (std::mem::size_of::<u32>() * config.particle_count as usize) as u64,
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
@@ -196,8 +217,8 @@ pub fn prepare_particle_buffers(
             let grid_start_idxs_buffer_size = grid_start_idxs_buffer.size();
             let grid_start_idxs_buffer_size = std::num::NonZeroU64::new(grid_start_idxs_buffer_size).unwrap();
 
-            let bind_group = get_bind_group(
-                "bind_group0",
+            let bind_group_normal = get_bind_group_normal(
+                "bind_group_normal",
                 &render_device,
                 &render_pipeline.bind_group_layout,
                 &particle_buffer,
@@ -207,7 +228,26 @@ pub fn prepare_particle_buffers(
                 &spatial_lookup_buffer,
                 spatial_lookup_buffer_size,
                 &grid_start_idxs_buffer,
-                grid_start_idxs_buffer_size
+                grid_start_idxs_buffer_size,
+                &temp_sorting_buffer,
+                &sorting_params_buffer,
+                sorting_params_buffer_size,
+            );
+            let bind_group_swapped = get_bind_group_swapped(
+                "bind_group_swapped",
+                &render_device,
+                &render_pipeline.bind_group_layout,
+                &particle_buffer,
+                particle_buffer_size,
+                &config_buffer,
+                config_buffer_size,
+                &spatial_lookup_buffer,
+                spatial_lookup_buffer_size,
+                &grid_start_idxs_buffer,
+                grid_start_idxs_buffer_size,
+                &temp_sorting_buffer,
+                &sorting_params_buffer,
+                sorting_params_buffer_size,
             );
 
             let quad_vertices: &[f32; 24] = &[
@@ -229,10 +269,13 @@ pub fn prepare_particle_buffers(
             
             commands.entity(entity).insert(GPUPipelineBuffers 
                 {
-                    bind_group: bind_group,
+                    bind_group_normal: bind_group_normal,
+                    bind_group_swapped: bind_group_swapped,
                     vertex_buffer: vertex_buffer,
                     config_buffer: config_buffer,
-                    //spatial_lookup_buffer: spatial_lookup_buffer,
+                    spatial_lookup_buffer: spatial_lookup_buffer,
+                    temp_sorting_buffer: temp_sorting_buffer,
+                    sorting_params_buffer: sorting_params_buffer,
                     //grid_start_idxs_buffer: grid_start_idxs_buffer
                 });
         }

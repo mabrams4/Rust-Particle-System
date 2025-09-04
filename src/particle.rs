@@ -15,6 +15,7 @@ use crate::{ParticleConfig, ParticleSystem};
 use crate::particle_render::{ParticleRenderNode, ParticleRenderLabel, ParticleRenderPipeline, 
     prepare_particle_buffers};
 use crate::particle_compute::{ParticleComputeNode, ParticleComputeLabel, ParticleComputePipeline};
+use crate::debug::{ParticleDebugLabel, ParticleDebugNode};
 
 #[derive(ShaderType, Default, Clone, Copy)]
 pub struct Particle {
@@ -45,6 +46,7 @@ impl Plugin for ParticlePlugin
         // Create the render node
         let render_node = ParticleRenderNode::new(render_app.world_mut());
         let compute_node = ParticleComputeNode::new(render_app.world_mut());
+        let debug_node = ParticleDebugNode::new(render_app.world_mut());
 
         // get the render graph
         let mut render_graph = render_app.world_mut().resource_mut::<RenderGraph>();
@@ -52,8 +54,10 @@ impl Plugin for ParticlePlugin
         // add the node and node edge to the render graph
         render_graph.add_node(ParticleRenderLabel, render_node);
         render_graph.add_node(ParticleComputeLabel, compute_node);
+        render_graph.add_node(ParticleDebugLabel, debug_node);
 
-        render_graph.add_node_edge(ParticleComputeLabel, ParticleRenderLabel);
+        render_graph.add_node_edge(ParticleComputeLabel, ParticleDebugLabel);
+        render_graph.add_node_edge(ParticleDebugLabel, ParticleRenderLabel);
         render_graph.add_node_edge(ParticleRenderLabel, CameraDriverLabel);
 
     }
