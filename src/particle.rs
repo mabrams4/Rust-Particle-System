@@ -13,7 +13,7 @@ use bevy::{
 
 use crate::{ParticleConfig, ParticleSystem};
 use crate::particle_render::{ParticleRenderNode, ParticleRenderLabel, ParticleRenderPipeline, 
-    prepare_particle_buffers};
+           prepare_particle_buffers};
 use crate::particle_compute::{ParticleComputeNode, ParticleComputeLabel, ParticleComputePipeline};
 use crate::debug::{ParticleDebugLabel, ParticleDebugNode};
 

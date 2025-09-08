@@ -29,7 +29,7 @@ impl Node for ParticleDebugNode
         world: &World,
     ) -> Result<(), NodeRunError> 
     {
-        //println!("Running Debug Node");
+        //println!("START DEBUG NODE");
         let particle_count = world.resource::<ParticleConfig>().particle_count;
         let queue = world.resource::<RenderQueue>();
         let device = world.resource::<RenderDevice>();
@@ -37,7 +37,7 @@ impl Node for ParticleDebugNode
         for entity in self.particle_system.iter_manual(world) {
             if let Some(pipeline_buffers) = world.get::<GPUPipelineBuffers>(entity) 
             {
-                let result = read_spatial_lookup_buffer(
+                let result = read_buffer_from_gpu(
                     device, 
                     queue, 
                     &pipeline_buffers.spatial_lookup_buffer, 
@@ -46,7 +46,7 @@ impl Node for ParticleDebugNode
                 validate_spatial_lookup(result, particle_count);
             }
         }
-
+        //println!("END DEBUG NODE");
         Ok(())
     }
 
@@ -65,7 +65,7 @@ impl ParticleDebugNode {
     }
 }
 
-pub fn read_spatial_lookup_buffer(
+pub fn read_buffer_from_gpu(
     device: &RenderDevice,
     queue: &RenderQueue, 
     source_buffer: &Buffer,
@@ -111,17 +111,19 @@ pub fn read_spatial_lookup_buffer(
     result
 }
 
-fn validate_spatial_lookup(
+pub fn validate_spatial_lookup(
     array: Vec<[u32; 2]>,
     particle_count: u32,
-)
-{
-    //println!("Validating Spatial Lookup Buffer");
-    for index in 0..particle_count as usize
-    {
-        let cell_key = array[index][0];
-        let particle_index = array[index][1];
-        //println!("Index: {index}; Cell Key: {cell_key}; Particle Index: {particle_index}");
+) {
+    for i in 1..particle_count as usize {
+        if array[i][0] < array[i - 1][0] {
+            println!("Array is NOT sorted at index {i}");
+            let end = (i + 10).min(particle_count as usize);
+            for j in i..end {
+                println!("Index {j}: Cell Key {}, Particle Index {}", array[j][0], array[j][1]);
+            }
+            return;
+        }
     }
-    let x = 3;
+    println!("ARRAY IS SORTED!!!");
 }

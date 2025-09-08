@@ -23,9 +23,9 @@ struct Config {
 struct SortingParams
 {
     n: u32,
-    j: u32,
-    k: u32,
-    padding: u32
+    group_width: u32,
+    group_height: u32,
+    step_index: u32
 }
 
 struct Particle {
@@ -50,9 +50,6 @@ var<uniform> sorting_params: SortingParams;
 var<storage, read_write> spatial_lookup: array<vec2<u32>>;
 
 @group(0) @binding(4) 
-var<storage, read_write> temp_sorting: array<vec2<u32>>;
-
-@group(0) @binding(5) 
 var<storage, read_write> grid_start_idxs: array<u32>;
 
 @compute @workgroup_size(64, 1, 1)
@@ -144,57 +141,40 @@ fn bin_particles_in_grid(@builtin(global_invocation_id) id: vec3<u32>)
 }
 
 @compute @workgroup_size(64, 1, 1)
-fn sort_particles(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let i = gid.x;
-    let n = sorting_params.n;
-    if (i >= n) { return; }
+fn sort_particles(@builtin(global_invocation_id) id: vec3<u32>) 
+{
+    let i = id.x;
+    if (i >= sorting_params.n / 2u) { return; }
 
-    let k = sorting_params.k; // block size
-    let j = sorting_params.j; // stride
+    let group_width = sorting_params.group_width;
+    let group_height = sorting_params.group_height;
+    let step_index = sorting_params.step_index;
 
-    // Block-local coordinates
-    let block_start = (i / k) * k;
-    let offset      = i - block_start;   // 0..k-1
-    let lane        = offset % j;        // 0..j-1
-    let half        = offset / j;        // 0 or 1
-
-    // All-ascending mapping (reverse lower half)
-    var left_local  : u32 = lane;
-    var right_local : u32 = lane + j;
-    if (half == 1u) {
-        left_local  = (j - 1u) - lane;
-        right_local = left_local + j;
+    let h_index = i & (group_width - 1u);
+    let index_left = h_index + (group_height + 1u) * (i / group_width);
+    var right_step_size: u32;  
+    if (step_index == 0u)
+    {
+        right_step_size = group_height - 2u * h_index;
     }
-
-    let left  = block_start + left_local;
-    let right = block_start + right_local;
-
-    // Only the thread mapped to `left` writes
-    if (i != left) { return; }
-
-    // Read with guards (treat OOB as +∞)
-    var a: vec2<u32>;
-    if (left < n) {
-        a = spatial_lookup[left];          // @binding(3)
-    } else {
-        a = vec2<u32>(0xFFFFFFFFu, 0xFFFFFFFFu);
+    else 
+    {
+        right_step_size = (group_height + 1u) / 2u;
     }
+    let index_right = index_left + right_step_size;
+    
+    // Exit if out of bounds (for non-power of 2 input sizes)
+	if (index_right >= sorting_params.n) { return; }
 
-    var b: vec2<u32>;
-    if (right < n) {
-        b = spatial_lookup[right];         // @binding(3)
-    } else {
-        b = vec2<u32>(0xFFFFFFFFu, 0xFFFFFFFFu);
+    let value_left = spatial_lookup[index_left][0];
+    let value_right = spatial_lookup[index_right][0];
+
+    if (value_left > value_right)
+    {
+        let temp = spatial_lookup[index_left];
+        spatial_lookup[index_left] = spatial_lookup[index_right];
+        spatial_lookup[index_right] = temp;
     }
-
-    // Ascending compare on cell_key (.x)
-    var lo = a;
-    var hi = b;
-    if (a.x > b.x) { lo = b; hi = a; }
-
-    // Writes to output buffer
-    if (left  < n)  { temp_sorting[left]  = lo; }   // @binding(4)
-    if (right < n)  { temp_sorting[right] = hi; }   // @binding(4)
 }
 
 

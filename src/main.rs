@@ -17,7 +17,7 @@ mod util;
 mod debug;
 use particle::Particle;
 
-const PARTICLE_COUNT: u32 = 100;
+const PARTICLE_COUNT: u32 = 100000;
 const PARTICLE_SIZE: f32 = 3.0;
 const GRAVITY: f32 = 0.0;
 const COMPUTE_SHADER_DELAY: u32 = 3;

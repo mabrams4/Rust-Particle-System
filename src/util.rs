@@ -7,6 +7,8 @@ use bevy::{
     },
 };
 use std::borrow::Cow;
+use std::num::NonZeroU64;
+use crate::particle_render::SortingParams;
 
 // returns the bind group layout for group 0 (used by render shader and main compute shader)
 pub fn get_bind_group_layout(render_device: &RenderDevice) -> BindGroupLayout
@@ -42,8 +44,8 @@ pub fn get_bind_group_layout(render_device: &RenderDevice) -> BindGroupLayout
             visibility: ShaderStages::VERTEX | ShaderStages::COMPUTE,
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
+                has_dynamic_offset: true,
+                min_binding_size: NonZeroU64::new(std::mem::size_of::<SortingParams>() as u64),
             },
             count: None
         },
@@ -69,24 +71,12 @@ pub fn get_bind_group_layout(render_device: &RenderDevice) -> BindGroupLayout
             },
             count: None
         },
-        BindGroupLayoutEntry
-        {
-            binding: 5,
-            visibility: ShaderStages::VERTEX | ShaderStages::COMPUTE,
-            ty: BindingType::Buffer {
-                ty: BufferBindingType::Storage { read_only: false },
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None
-        },
-        
         ]
     )
 }
 
-// returns bind group for group 0 normal
-pub fn get_bind_group_normal(
+// returns bind group for group 0 
+pub fn get_bind_group(
     label: &str,
     render_device: &RenderDevice,
     bind_group_layout: &BindGroupLayout,
@@ -98,9 +88,7 @@ pub fn get_bind_group_normal(
     spatial_lookup_buffer_size: std::num::NonZeroU64,
     grid_start_idxs_buffer: &Buffer,
     grid_start_idxs_buffer_size: std::num::NonZeroU64,
-    temp_sorting_buffer: &Buffer,
     sorting_params_buffer: &Buffer,
-    sorting_params_buffer_size: std::num::NonZeroU64,
 ) -> BindGroup
 {
     render_device.create_bind_group(
@@ -134,7 +122,7 @@ pub fn get_bind_group_normal(
                 {   
                     buffer: &sorting_params_buffer, 
                     offset: 0, 
-                    size: Some(sorting_params_buffer_size)
+                    size: NonZeroU64::new(std::mem::size_of::<SortingParams>() as u64)
                 })
         },
         BindGroupEntry
@@ -150,103 +138,6 @@ pub fn get_bind_group_normal(
         BindGroupEntry
         {
             binding: 4,
-            resource: BindingResource::Buffer(BufferBinding 
-                {   
-                    buffer: &temp_sorting_buffer, 
-                    offset: 0, 
-                    size: Some(spatial_lookup_buffer_size)
-                })
-        },
-        
-        BindGroupEntry
-        {
-            binding: 5,
-            resource: BindingResource::Buffer(BufferBinding 
-                {   
-                    buffer: &grid_start_idxs_buffer, 
-                    offset: 0, 
-                    size: Some(grid_start_idxs_buffer_size)
-                })
-        }
-    ])
-}
-
-// returns bind group for group 0 swapped spatial lookup and temp for sorting pino pong
-pub fn get_bind_group_swapped(
-    label: &str,
-    render_device: &RenderDevice,
-    bind_group_layout: &BindGroupLayout,
-    particle_buffer: &Buffer,
-    particle_buffer_size: std::num::NonZeroU64,
-    config_buffer: &Buffer,
-    config_buffer_size: std::num::NonZeroU64,
-    spatial_lookup_buffer: &Buffer,
-    spatial_lookup_buffer_size: std::num::NonZeroU64,
-    grid_start_idxs_buffer: &Buffer,
-    grid_start_idxs_buffer_size: std::num::NonZeroU64,
-    temp_sorting_buffer: &Buffer,
-    sorting_params_buffer: &Buffer,
-    sorting_params_buffer_size: std::num::NonZeroU64,
-) -> BindGroup
-{
-    render_device.create_bind_group(
-    label, 
-    bind_group_layout, 
-    &[
-        BindGroupEntry 
-        {
-            binding: 0,
-            resource: BindingResource::Buffer(BufferBinding 
-                {   
-                    buffer: &particle_buffer, 
-                    offset: 0, 
-                    size: Some(particle_buffer_size)
-                })
-        },
-        BindGroupEntry 
-        {
-            binding: 1,
-            resource: BindingResource::Buffer(BufferBinding 
-                {   
-                    buffer: &config_buffer, 
-                    offset: 0, 
-                    size: Some(config_buffer_size)
-                })
-        },
-        BindGroupEntry
-        {
-            binding: 2,
-            resource: BindingResource::Buffer(BufferBinding 
-                {   
-                    buffer: &sorting_params_buffer, 
-                    offset: 0, 
-                    size: Some(sorting_params_buffer_size)
-                })
-        },
-        BindGroupEntry
-        {
-            binding: 3,
-            resource: BindingResource::Buffer(BufferBinding 
-                {   
-                    buffer: &temp_sorting_buffer, 
-                    offset: 0, 
-                    size: Some(spatial_lookup_buffer_size)
-                })
-        },
-        BindGroupEntry
-        {
-            binding: 4,
-            resource: BindingResource::Buffer(BufferBinding 
-                {   
-                    buffer: &spatial_lookup_buffer, 
-                    offset: 0, 
-                    size: Some(spatial_lookup_buffer_size)
-                })
-        },
-        
-        BindGroupEntry
-        {
-            binding: 5,
             resource: BindingResource::Buffer(BufferBinding 
                 {   
                     buffer: &grid_start_idxs_buffer, 
