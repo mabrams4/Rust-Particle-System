@@ -8,7 +8,7 @@ use bevy::{
 
 use crate::{particle_compute::render_graph::NodeRunError, ParticleConfig};
 use crate::ParticleSystem;
-use crate::particle_render::GPUPipelineBuffers;
+use crate::particle_buffers::GPUPipelineBuffers;
 use crate::util::{get_bind_group_layout, get_compute_pipeline_descriptor};
 
 const WORKGROUP_SIZE: u32 = 64;
@@ -99,10 +99,7 @@ impl Node for ParticleComputeNode
                         pass.dispatch_workgroups((config.particle_count + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1, 1);
                     }
                 }
-                // println!("---------PRE SORT---------");
-                // let device = world.resource::<RenderDevice>();
-                // let result = read_buffer_from_gpu(device, queue, &pipeline_buffers.spatial_lookup_buffer, config.particle_count);
-                // validate_spatial_lookup(result, config.particle_count);
+                
                 // Pass 2: sort particles by grid cell key
                 {
                     if let Some(pipeline_id_sort) =
@@ -136,11 +133,6 @@ impl Node for ParticleComputeNode
                         }
                     }
                 }
-
-                // println!("---------POST SORT---------");
-                // let device = world.resource::<RenderDevice>();
-                // let result = read_buffer_from_gpu(device, queue, &pipeline_buffers.spatial_lookup_buffer, config.particle_count);
-                // validate_spatial_lookup(result, config.particle_count);
 
                 // Pass 3: integrate particle dynamics
                 {

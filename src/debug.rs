@@ -9,7 +9,7 @@ use bevy::{
 
 use crate::{debug::render_graph::NodeRunError, ParticleConfig};
 use crate::ParticleSystem;
-use crate::particle_render::GPUPipelineBuffers;
+use crate::particle_buffers::GPUPipelineBuffers;
 
 
 #[derive(RenderLabel, Hash, Debug, Eq, PartialEq, Clone)]
@@ -125,5 +125,5 @@ pub fn validate_spatial_lookup(
             return;
         }
     }
-    println!("ARRAY IS SORTED!!!");
+    //println!("ARRAY IS SORTED!!!");
 }

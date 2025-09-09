@@ -12,12 +12,12 @@ use bevy::{
 };
 
 use crate::{ParticleConfig, ParticleSystem};
-use crate::particle_render::{ParticleRenderNode, ParticleRenderLabel, ParticleRenderPipeline, 
-           prepare_particle_buffers};
+use crate::particle_render::{ParticleRenderNode, ParticleRenderLabel, ParticleRenderPipeline};
+use crate::particle_buffers::prepare_particle_buffers;
 use crate::particle_compute::{ParticleComputeNode, ParticleComputeLabel, ParticleComputePipeline};
 use crate::debug::{ParticleDebugLabel, ParticleDebugNode};
 
-#[derive(ShaderType, Default, Clone, Copy)]
+#[derive(ShaderType, Default, Clone, Copy)] 
 pub struct Particle {
     pub position: [f32; 2],
     pub velocity: [f32; 2], 

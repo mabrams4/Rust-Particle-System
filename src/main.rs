@@ -15,6 +15,7 @@ mod particle_render;
 mod particle_compute;
 mod util;
 mod debug;
+mod particle_buffers;
 use particle::Particle;
 
 const PARTICLE_COUNT: u32 = 100000;

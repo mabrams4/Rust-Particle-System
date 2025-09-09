@@ -8,7 +8,7 @@ use bevy::{
 };
 use std::borrow::Cow;
 use std::num::NonZeroU64;
-use crate::particle_render::SortingParams;
+use crate::particle_buffers::SortingParams;
 
 // returns the bind group layout for group 0 (used by render shader and main compute shader)
 pub fn get_bind_group_layout(render_device: &RenderDevice) -> BindGroupLayout
