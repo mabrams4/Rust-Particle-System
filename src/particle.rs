@@ -21,9 +21,6 @@ use crate::debug::{ParticleDebugLabel, ParticleDebugNode};
 pub struct Particle {
     pub position: [f32; 2],
     pub velocity: [f32; 2], 
-    pub acceleration: [f32; 2], 
-    pub compute_shader_delay: u32,
-    pub temp2: f32,
     pub color: [f32; 4],
 }
 

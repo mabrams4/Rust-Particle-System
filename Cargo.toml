@@ -9,11 +9,6 @@ futures-intrusive = "0.5.0"
 rand = "0.9.1"
 rand_distr = "0.5.1"
 
-[profile.dev]
-debug = true
-opt-level = 0
-incremental = true
-
 [dependencies.bevy]
 version = "0.16"
 default-features = false
@@ -24,3 +19,9 @@ features = [
   "bevy_log",
   "bevy_winit",
 ]
+
+[profile.dev]
+debug = true
+opt-level = 0
+incremental = true
+

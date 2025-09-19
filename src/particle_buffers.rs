@@ -20,7 +20,8 @@ pub struct GPUPipelineBuffers {
     pub vertex_buffer: Buffer,
     pub config_buffer: Buffer,
     pub spatial_lookup_buffer: Buffer,
-    //pub grid_start_idxs_buffer: Buffer,
+    pub spatial_lookup_offsets_buffer: Buffer,
+    pub particle_densities_buffer: Buffer,
 }
 
 #[repr(C)]
@@ -139,14 +140,23 @@ pub fn prepare_particle_buffers(
             // Write all parameters at once
             render_queue.write_buffer(&sorting_params_buffer, 0, &sorting_buffer_data);
 
-            let grid_start_idxs_buffer = render_device.create_buffer(&BufferDescriptor {
-                label: Some("grid_start_idxs_buffer"),
+            let spatial_lookup_offsets_buffer = render_device.create_buffer(&BufferDescriptor {
+                label: Some("spatial_lookup_offsets_buffer"),
                 size: (std::mem::size_of::<u32>() * config.particle_count as usize) as u64,
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             });
-            let grid_start_idxs_buffer_size = grid_start_idxs_buffer.size();
-            let grid_start_idxs_buffer_size = std::num::NonZeroU64::new(grid_start_idxs_buffer_size).unwrap();
+            let spatial_lookup_offsets_buffer_size = spatial_lookup_offsets_buffer.size();
+            let spatial_lookup_offsets_buffer_size = std::num::NonZeroU64::new(spatial_lookup_offsets_buffer_size).unwrap();
+
+            let particle_densities_buffer = render_device.create_buffer(&BufferDescriptor {
+                label: Some("particle_densities_buffer"),
+                size: (std::mem::size_of::<f32>() * config.particle_count as usize) as u64,
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+            let particle_densities_buffer_size = particle_densities_buffer.size();
+            let particle_densities_buffer_size = std::num::NonZeroU64::new(particle_densities_buffer_size).unwrap();
 
             let bind_group = get_bind_group(
                 "bind_group",
@@ -158,9 +168,11 @@ pub fn prepare_particle_buffers(
                 config_buffer_size,
                 &spatial_lookup_buffer,
                 spatial_lookup_buffer_size,
-                &grid_start_idxs_buffer,
-                grid_start_idxs_buffer_size,
+                &spatial_lookup_offsets_buffer,
+                spatial_lookup_offsets_buffer_size,
                 &sorting_params_buffer,
+                &particle_densities_buffer,
+                particle_densities_buffer_size
             );
 
             let quad_vertices: &[f32; 24] = &[
@@ -186,7 +198,8 @@ pub fn prepare_particle_buffers(
                     vertex_buffer: vertex_buffer,
                     config_buffer: config_buffer,
                     spatial_lookup_buffer: spatial_lookup_buffer,
-                    //grid_start_idxs_buffer: grid_start_idxs_buffer
+                    spatial_lookup_offsets_buffer: spatial_lookup_offsets_buffer,
+                    particle_densities_buffer: particle_densities_buffer
                 });
         }
     }
@@ -194,6 +207,7 @@ pub fn prepare_particle_buffers(
     {
         // Update time delta
         config.delta_time = time.delta().as_secs_f32();
+        config.frame_count += 1;
         
         // Update the uniform buffer on the GPU
         if let Ok(render_particle_buffers) = pipeline_buffers_query.single() {

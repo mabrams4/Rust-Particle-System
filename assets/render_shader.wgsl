@@ -4,28 +4,23 @@ struct Config {
     delta_time: f32,                // 4 bytes
     gravity: f32,                   // 4 bytes
 
-    inflow_vel: f32,                // 4 bytes
-    vertical_jitter: f32,           // 4 bytes
-    air_density: f32,               // 4 bytes
-    air_viscosity: f32,             // 4 bytes
-
-    pressure_gradient: vec2<f32>,   // 8 bytes
-    padding: vec2<f32>,             // 8 bytes (ensures 16-byte alignment)
+    target_density: f32,            // 4 bytes
+    pressure_multiplier: f32,       // 4 bytes
+    max_energy: f32,                // 4 bytes
+    smoothing_radius: f32,          // 4 bytes
 
     screen_bounds: vec4<f32>,       // 16 bytes
     view_proj: mat4x4<f32>,         // 64 bytes
-    max_energy: f32,
-    smoothing_radius: f32,
-    temp3: f32,
-    temp4: f32,
-};
+    
+    frame_count: u32,               // 4 bytes
+    temp2: u32,                     // 4 bytes
+    temp3: u32,                     // 4 bytes
+    temp4: u32,                     // 4 bytes
+}
 
 struct Particle {
     position: vec2<f32>,
     velocity: vec2<f32>,
-    acceleration: vec2<f32>,
-    compute_shader_delay: u32,
-    temp2: f32,
     color: vec4<f32>,
 }
 

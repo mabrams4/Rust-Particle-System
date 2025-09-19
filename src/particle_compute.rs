@@ -20,9 +20,10 @@ pub struct ParticleComputeLabel;
 #[derive(Resource)]
 pub struct ParticleComputePipeline 
 {
-    compute_main_pipeline_id: CachedComputePipelineId,
     compute_grid_pipeline_id: CachedComputePipelineId,
     compute_sort_particles_pipeline_id: CachedComputePipelineId,
+    compute_spatial_lookup_offsets_pipeline_id: CachedComputePipelineId,
+    compute_main_pipeline_id: CachedComputePipelineId,
 }
 
 impl FromWorld for ParticleComputePipeline 
@@ -52,6 +53,10 @@ impl FromWorld for ParticleComputePipeline
             get_compute_pipeline_descriptor(&bind_group_layout, &shader_handle, "sort_particles")
         );
 
+        let compute_spatial_lookup_offsets_pipeline_id = pipeline_cache.queue_compute_pipeline(
+            get_compute_pipeline_descriptor(&bind_group_layout, &shader_handle, "calculate_spatial_lookup_offsets")
+        );
+
         // pipeline for main simulation step
         let compute_main_pipeline_id = pipeline_cache.queue_compute_pipeline(
             get_compute_pipeline_descriptor(&bind_group_layout, &shader_handle, "simulation_step")
@@ -60,9 +65,10 @@ impl FromWorld for ParticleComputePipeline
         // return the ParticleComputePipeline object
         ParticleComputePipeline 
         {  
-            compute_main_pipeline_id: compute_main_pipeline_id,
             compute_grid_pipeline_id: compute_grid_pipeline_id,
             compute_sort_particles_pipeline_id: compute_sort_particles_pipeline_id,
+            compute_spatial_lookup_offsets_pipeline_id: compute_spatial_lookup_offsets_pipeline_id,
+            compute_main_pipeline_id: compute_main_pipeline_id,
         }
     }
 }
@@ -134,7 +140,21 @@ impl Node for ParticleComputeNode
                     }
                 }
 
-                // Pass 3: integrate particle dynamics
+                // Pass 3: Calcualte grid start idxs
+                {
+                    let mut pass = render_context.command_encoder()
+                        .begin_compute_pass(&ComputePassDescriptor::default());
+
+                    if let Some(pipeline_id_spatial_lookup_offsets) =
+                        pipeline_cache.get_compute_pipeline(pipeline.compute_spatial_lookup_offsets_pipeline_id)
+                    {
+                        pass.set_bind_group(0, &pipeline_buffers.bind_group, &[0]);
+                        pass.set_pipeline(pipeline_id_spatial_lookup_offsets);
+                        pass.dispatch_workgroups((config.particle_count + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1, 1);
+                    }
+                } 
+
+                // Pass 4: integrate particle dynamics
                 {
                     let mut pass = render_context.command_encoder()
                         .begin_compute_pass(&ComputePassDescriptor::default());

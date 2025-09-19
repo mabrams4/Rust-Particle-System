@@ -71,6 +71,17 @@ pub fn get_bind_group_layout(render_device: &RenderDevice) -> BindGroupLayout
             },
             count: None
         },
+        BindGroupLayoutEntry
+        {
+            binding: 5,
+            visibility: ShaderStages::VERTEX | ShaderStages::COMPUTE,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Storage { read_only: false },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None
+        },
         ]
     )
 }
@@ -86,9 +97,11 @@ pub fn get_bind_group(
     config_buffer_size: std::num::NonZeroU64,
     spatial_lookup_buffer: &Buffer,
     spatial_lookup_buffer_size: std::num::NonZeroU64,
-    grid_start_idxs_buffer: &Buffer,
-    grid_start_idxs_buffer_size: std::num::NonZeroU64,
+    spatial_lookup_offsets_buffer: &Buffer,
+    spatial_lookup_offsets_buffer_size: std::num::NonZeroU64,
     sorting_params_buffer: &Buffer,
+    particle_densities_buffer : &Buffer,
+    particle_densities_buffer_size: std::num::NonZeroU64,
 ) -> BindGroup
 {
     render_device.create_bind_group(
@@ -140,9 +153,19 @@ pub fn get_bind_group(
             binding: 4,
             resource: BindingResource::Buffer(BufferBinding 
                 {   
-                    buffer: &grid_start_idxs_buffer, 
+                    buffer: &spatial_lookup_offsets_buffer, 
                     offset: 0, 
-                    size: Some(grid_start_idxs_buffer_size)
+                    size: Some(spatial_lookup_offsets_buffer_size)
+                })
+        },
+        BindGroupEntry
+        {
+            binding: 5,
+            resource: BindingResource::Buffer(BufferBinding 
+                {   
+                    buffer: &particle_densities_buffer, 
+                    offset: 0, 
+                    size: Some(particle_densities_buffer_size)
                 })
         }
     ])
