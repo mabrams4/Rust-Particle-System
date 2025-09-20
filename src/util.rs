@@ -82,6 +82,17 @@ pub fn get_bind_group_layout(render_device: &RenderDevice) -> BindGroupLayout
             },
             count: None
         },
+        BindGroupLayoutEntry
+        {
+            binding: 6,
+            visibility: ShaderStages::VERTEX | ShaderStages::COMPUTE,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Storage { read_only: false },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None
+        },
         ]
     )
 }
@@ -102,6 +113,8 @@ pub fn get_bind_group(
     sorting_params_buffer: &Buffer,
     particle_densities_buffer : &Buffer,
     particle_densities_buffer_size: std::num::NonZeroU64,
+    predicted_positions_buffer : &Buffer,
+    predicted_positions_buffer_size: std::num::NonZeroU64,
 ) -> BindGroup
 {
     render_device.create_bind_group(
@@ -166,6 +179,16 @@ pub fn get_bind_group(
                     buffer: &particle_densities_buffer, 
                     offset: 0, 
                     size: Some(particle_densities_buffer_size)
+                })
+        },
+        BindGroupEntry
+        {
+            binding: 6,
+            resource: BindingResource::Buffer(BufferBinding 
+                {   
+                    buffer: &predicted_positions_buffer, 
+                    offset: 0, 
+                    size: Some(predicted_positions_buffer_size)
                 })
         }
     ])

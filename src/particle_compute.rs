@@ -23,7 +23,8 @@ pub struct ParticleComputePipeline
     compute_grid_pipeline_id: CachedComputePipelineId,
     compute_sort_particles_pipeline_id: CachedComputePipelineId,
     compute_spatial_lookup_offsets_pipeline_id: CachedComputePipelineId,
-    compute_main_pipeline_id: CachedComputePipelineId,
+    compute_pre_sim_step_pipeline_id: CachedComputePipelineId,
+    compute_sim_step_pipeline_id: CachedComputePipelineId,
 }
 
 impl FromWorld for ParticleComputePipeline 
@@ -57,8 +58,12 @@ impl FromWorld for ParticleComputePipeline
             get_compute_pipeline_descriptor(&bind_group_layout, &shader_handle, "calculate_spatial_lookup_offsets")
         );
 
+        let compute_pre_sim_step_pipeline_id = pipeline_cache.queue_compute_pipeline(
+            get_compute_pipeline_descriptor(&bind_group_layout, &shader_handle, "pre_simulation_step")
+        );
+
         // pipeline for main simulation step
-        let compute_main_pipeline_id = pipeline_cache.queue_compute_pipeline(
+        let compute_sim_step_pipeline_id = pipeline_cache.queue_compute_pipeline(
             get_compute_pipeline_descriptor(&bind_group_layout, &shader_handle, "simulation_step")
         );
         
@@ -68,7 +73,8 @@ impl FromWorld for ParticleComputePipeline
             compute_grid_pipeline_id: compute_grid_pipeline_id,
             compute_sort_particles_pipeline_id: compute_sort_particles_pipeline_id,
             compute_spatial_lookup_offsets_pipeline_id: compute_spatial_lookup_offsets_pipeline_id,
-            compute_main_pipeline_id: compute_main_pipeline_id,
+            compute_sim_step_pipeline_id: compute_sim_step_pipeline_id,
+            compute_pre_sim_step_pipeline_id: compute_pre_sim_step_pipeline_id,
         }
     }
 }
@@ -154,16 +160,30 @@ impl Node for ParticleComputeNode
                     }
                 } 
 
-                // Pass 4: integrate particle dynamics
+                // Pass 4: update predicted positions and particle densities
                 {
                     let mut pass = render_context.command_encoder()
                         .begin_compute_pass(&ComputePassDescriptor::default());
 
-                    if let Some(pipeline_id_main) =
-                        pipeline_cache.get_compute_pipeline(pipeline.compute_main_pipeline_id)
+                    if let Some(pipeline_id_pre_sim_step) =
+                        pipeline_cache.get_compute_pipeline(pipeline.compute_pre_sim_step_pipeline_id)
                     {
                         pass.set_bind_group(0, &pipeline_buffers.bind_group, &[0]);
-                        pass.set_pipeline(pipeline_id_main);
+                        pass.set_pipeline(pipeline_id_pre_sim_step);
+                        pass.dispatch_workgroups((config.particle_count + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1, 1);
+                    }
+                } 
+
+                // Pass 5: integrate particle dynamics
+                {
+                    let mut pass = render_context.command_encoder()
+                        .begin_compute_pass(&ComputePassDescriptor::default());
+
+                    if let Some(pipeline_id_sim_step) =
+                        pipeline_cache.get_compute_pipeline(pipeline.compute_sim_step_pipeline_id)
+                    {
+                        pass.set_bind_group(0, &pipeline_buffers.bind_group, &[0]);
+                        pass.set_pipeline(pipeline_id_sim_step);
                         pass.dispatch_workgroups((config.particle_count + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1, 1);
                     }
                 } 

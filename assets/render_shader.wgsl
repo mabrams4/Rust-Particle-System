@@ -1,21 +1,26 @@
 struct Config {
     particle_count: u32,            // 4 bytes
     particle_size: f32,             // 4 bytes
+    smoothing_radius: f32,          // 4 bytes
+    max_energy: f32,                // 4 bytes
+
+    damping_factor: f32,            // 4 bytes
+    pad1: f32,                      // 4 bytes
+    pad2: f32,                      // 4 bytes
+    pad3: f32,                      // 4 bytes
+
     delta_time: f32,                // 4 bytes
+    fixed_delta_time: f32,          // 4 bytes
+    frame_count: u32,               // 4 bytes
     gravity: f32,                   // 4 bytes
 
     target_density: f32,            // 4 bytes
     pressure_multiplier: f32,       // 4 bytes
-    max_energy: f32,                // 4 bytes
-    smoothing_radius: f32,          // 4 bytes
+    viscocity_strength: f32,        // 4 bytes
+    near_density_multiplier: f32,   // 4 bytes
 
-    screen_bounds: vec4<f32>,       // 16 bytes
+    screen_bounds: vec4<f32>,       // 16 bytes     [x_min, x_max, y_min, y_max]
     view_proj: mat4x4<f32>,         // 64 bytes
-    
-    frame_count: u32,               // 4 bytes
-    temp2: u32,                     // 4 bytes
-    temp3: u32,                     // 4 bytes
-    temp4: u32,                     // 4 bytes
 }
 
 struct Particle {

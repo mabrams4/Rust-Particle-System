@@ -6,7 +6,6 @@ use bevy::{
     },
     window::WindowMode,
 };
-use rand::prelude::*;
 use rand_distr::{Distribution, Normal};
 use bytemuck::{Pod, Zeroable};
 
@@ -19,12 +18,16 @@ mod particle_buffers;
 mod parameter_gui;
 use particle::Particle;
 
-const PARTICLE_COUNT: u32 = 10000;
+const PARTICLE_COUNT: u32 = 30000;
 const PARTICLE_SIZE: f32 = 3.0;
 const SMOOTHING_RADIUS: f32 = PARTICLE_SIZE * PARTICLE_SIZE;
 const GRAVITY: f32 = 0.0;
-const TARGET_DENSITY: f32 = 0.001;
-const PRESSURE_MULTIPLIER: f32 = 1000.0;
+const TARGET_DENSITY: f32 = 0.01;
+const PRESSURE_MULTIPLIER: f32 = 20000.0;
+const NEAR_DENSITY_MULTIPLIER: f32 = 1000.0;
+const VISCOCITY_STRENGTH: f32 = 1.0;
+const DAMPING_FACTOR: f32 = 0.7;
+const FIXED_DELTA_TIME: f32 = 1.0 / 120.0;
 const MAX_ENERGY: f32 = 10000.0;
 
 #[derive(ExtractComponent, Component, Default, Clone)]
@@ -37,21 +40,27 @@ pub struct ParticleSystem {
 pub struct ParticleConfig {
     pub particle_count: u32,            // 4 bytes
     pub particle_size: f32,             // 4 bytes
+    pub smoothing_radius: f32,          // 4 bytes
+    pub max_energy: f32,                // 4 bytes
+
+    pub damping_factor: f32,            // 4 bytes
+    pub pad1: f32,                      // 4 bytes
+    pub pad2: f32,                      // 4 bytes
+    pub pad3: f32,                      // 4 bytes
+
     pub delta_time: f32,                // 4 bytes
+    pub fixed_delta_time: f32,          // 4 bytes
+    pub frame_count: u32,               // 4 bytes
     pub gravity: f32,                   // 4 bytes
 
     pub target_density: f32,            // 4 bytes
     pub pressure_multiplier: f32,       // 4 bytes
-    pub max_energy: f32,                // 4 bytes
-    pub smoothing_radius: f32,          // 4 bytes
+    pub viscocity_strength: f32,        // 4 bytes
+    pub near_density_multiplier: f32,   // 4 bytes
 
     pub screen_bounds: [f32; 4],        // 16 bytes     [x_min, x_max, y_min, y_max]
-    pub view_proj: [[f32; 4]; 4],       // 64 bytes
 
-    pub frame_count: u32,               // 4 bytes
-    pub temp2: u32,                     // 4 bytes
-    pub temp3: u32,                     // 4 bytes
-    pub temp4: u32,                     // 4 bytes
+    pub view_proj: [[f32; 4]; 4],       // 64 bytes
 }
 
 fn main() 
@@ -70,22 +79,26 @@ fn main()
     .insert_resource(ParticleConfig {
         particle_count: PARTICLE_COUNT,
         particle_size: PARTICLE_SIZE,
+        smoothing_radius: SMOOTHING_RADIUS,  // Also our grid cell size
+        max_energy: MAX_ENERGY,
+
+        damping_factor: DAMPING_FACTOR,
+        pad1: 0.0,
+        pad2: 0.0,
+        pad3: 0.0,
+
+        screen_bounds: [0.0; 4],
+        view_proj: Mat4::IDENTITY.to_cols_array_2d(),
+
         delta_time: 0.0,
+        fixed_delta_time: FIXED_DELTA_TIME,
+        frame_count: 0,
         gravity: GRAVITY,
 
         target_density: TARGET_DENSITY,
         pressure_multiplier: PRESSURE_MULTIPLIER,
-        max_energy: MAX_ENERGY,
-        smoothing_radius: SMOOTHING_RADIUS,  // Also our grid cell size
-
-        screen_bounds: [0.0; 4],
-        view_proj: Mat4::IDENTITY.to_cols_array_2d(),
-        
-        frame_count: 0,
-        temp2: 0,
-        temp3: 0,
-        temp4: 0,
-
+        viscocity_strength: VISCOCITY_STRENGTH,
+        near_density_multiplier: NEAR_DENSITY_MULTIPLIER,
     })
 
     .add_systems(Startup, setup_camera)
@@ -138,7 +151,6 @@ fn setup_particles(
         }
 
         setup_particles_scatter(particle_config, commands);
-        //setup_particles_explode(commands);
     }
 }
 
@@ -176,32 +188,6 @@ fn setup_particles_scatter(
 
     // Spawn particle system and camera
     commands.spawn(ParticleSystem { particles });
-}
-
-fn setup_particles_explode(
-    mut commands: Commands,
-)
-{
-    const MAX_INIT_VEL: f32 = 100.0;
-    const MAX_INIT_ACCEL: f32 = 50.0;
-    let mut particles = Vec::with_capacity(PARTICLE_COUNT as usize);
-
-        for _ in 0..PARTICLE_COUNT {
-            // TEST for exploding out of nowwhere
-            let mut rng = rand::rng();
-
-            let init_x_vel = rng.random_range(-MAX_INIT_VEL..MAX_INIT_VEL);
-            let init_y_vel = rng.random_range(-MAX_INIT_VEL..MAX_INIT_VEL);
-
-            particles.push(Particle {
-                position: [0.0, 0.0],
-                velocity: [init_x_vel, init_y_vel], // rightward + small variation
-                color: [1.0, 0.0, 1.0, 1.0],
-            });
-        }
-
-        // Spawn particle system and camera
-        commands.spawn(ParticleSystem { particles });
 }
 
 fn exit_on_escape(

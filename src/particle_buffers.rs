@@ -22,6 +22,7 @@ pub struct GPUPipelineBuffers {
     pub spatial_lookup_buffer: Buffer,
     pub spatial_lookup_offsets_buffer: Buffer,
     pub particle_densities_buffer: Buffer,
+    pub predictied_positions_buffer: Buffer,
 }
 
 #[repr(C)]
@@ -151,12 +152,21 @@ pub fn prepare_particle_buffers(
 
             let particle_densities_buffer = render_device.create_buffer(&BufferDescriptor {
                 label: Some("particle_densities_buffer"),
-                size: (std::mem::size_of::<f32>() * config.particle_count as usize) as u64,
+                size: (std::mem::size_of::<f32>() * 2 * config.particle_count as usize) as u64,
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             });
             let particle_densities_buffer_size = particle_densities_buffer.size();
             let particle_densities_buffer_size = std::num::NonZeroU64::new(particle_densities_buffer_size).unwrap();
+
+            let predictied_positions_buffer = render_device.create_buffer(&BufferDescriptor {
+                label: Some("predictied_positions_buffer"),
+                size: (std::mem::size_of::<f32>() * 2 * config.particle_count as usize) as u64,
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+            let predictied_positions_buffer_size = predictied_positions_buffer.size();
+            let predictied_positions_buffer_size = std::num::NonZeroU64::new(predictied_positions_buffer_size).unwrap();
 
             let bind_group = get_bind_group(
                 "bind_group",
@@ -172,7 +182,9 @@ pub fn prepare_particle_buffers(
                 spatial_lookup_offsets_buffer_size,
                 &sorting_params_buffer,
                 &particle_densities_buffer,
-                particle_densities_buffer_size
+                particle_densities_buffer_size,
+                &predictied_positions_buffer,
+                predictied_positions_buffer_size,
             );
 
             let quad_vertices: &[f32; 24] = &[
@@ -199,7 +211,8 @@ pub fn prepare_particle_buffers(
                     config_buffer: config_buffer,
                     spatial_lookup_buffer: spatial_lookup_buffer,
                     spatial_lookup_offsets_buffer: spatial_lookup_offsets_buffer,
-                    particle_densities_buffer: particle_densities_buffer
+                    particle_densities_buffer: particle_densities_buffer,
+                    predictied_positions_buffer: predictied_positions_buffer,
                 });
         }
     }
