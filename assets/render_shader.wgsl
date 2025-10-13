@@ -97,5 +97,5 @@ fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32>
         discard;
     }
 
-    return input.color; // orange-ish glowing circle
+    return input.color; 
 }

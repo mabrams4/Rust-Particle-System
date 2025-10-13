@@ -51,12 +51,6 @@ pub fn prepare_particle_buffers(
     if !*ran 
     {
         *ran = true;
-        if let Ok(view) = camera_query.single() {
-            let view_matrix = view.world_from_view.compute_matrix().inverse();
-            let view_proj = view.clip_from_view * view_matrix;
-            config.view_proj = view_proj.to_cols_array_2d();
-        }
-        config.delta_time = time.delta().as_secs_f32();
 
         let config_buffer = render_device.create_buffer(&BufferDescriptor {
             label: Some("uniform_buffer"),
@@ -218,6 +212,11 @@ pub fn prepare_particle_buffers(
     }
     else 
     {
+        if let Ok(view) = camera_query.single() {
+            let view_matrix = view.world_from_view.compute_matrix().inverse();
+            let view_proj = view.clip_from_view * view_matrix;
+            config.view_proj = view_proj.to_cols_array_2d();
+        }
         // Update time delta
         config.delta_time = time.delta().as_secs_f32();
         config.frame_count += 1;

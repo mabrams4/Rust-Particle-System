@@ -11,7 +11,7 @@ use crate::{debug::render_graph::NodeRunError, ParticleConfig};
 use crate::ParticleSystem;
 use crate::particle_buffers::GPUPipelineBuffers;
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 
 #[derive(RenderLabel, Hash, Debug, Eq, PartialEq, Clone)]
@@ -35,40 +35,42 @@ impl Node for ParticleDebugNode
         if DEBUG
         {
             //println!("START DEBUG NODE");
-            let particle_count = world.resource::<ParticleConfig>().particle_count;
-            let queue = world.resource::<RenderQueue>();
-            let device = world.resource::<RenderDevice>();
+            //let config = world.resource::<ParticleConfig>();
+            // print_config(*config);
+            // let particle_count = config.particle_count;
+            // let queue = world.resource::<RenderQueue>();
+            // let device = world.resource::<RenderDevice>();
 
-            for entity in self.particle_system.iter_manual(world) {
-                if let Some(pipeline_buffers) = world.get::<GPUPipelineBuffers>(entity) 
-                {
-                    // let spatial_lookup = read_spatial_lookup_buffer_from_gpu(
-                    //     device, 
-                    //     queue, 
-                    //     &pipeline_buffers.spatial_lookup_buffer, 
-                    //     particle_count
-                    // );
-                    // validate_spatial_lookup(spatial_lookup, particle_count);
+            // for entity in self.particle_system.iter_manual(world) {
+            //     if let Some(pipeline_buffers) = world.get::<GPUPipelineBuffers>(entity) 
+            //     {
+            //         let spatial_lookup = read_spatial_lookup_buffer_from_gpu(
+            //             device, 
+            //             queue, 
+            //             &pipeline_buffers.spatial_lookup_buffer, 
+            //             particle_count
+            //         );
+            //         validate_spatial_lookup(spatial_lookup, particle_count);
 
-                    // let spatial_lookup_offsets = read_grid_start_idxs_from_gpu(
-                    //     device, 
-                    //     queue, 
-                    //     &pipeline_buffers.spatial_lookup_offsets_buffer, 
-                    //     particle_count
-                    // );
-                    // print_spatial_lookup_offsets(spatial_lookup_offsets, particle_count);
-                    let densities = read_particle_densities_from_gpu(
-                        device, 
-                        queue, 
-                        &pipeline_buffers.particle_densities_buffer, 
-                        particle_count
-                    );
-                    if self.frame_count % 10 == 0
-                    {
-                        print_densities(densities, self.frame_count);
-                    }
-                }
-            }
+            //         let spatial_lookup_offsets = read_grid_start_idxs_from_gpu(
+            //             device, 
+            //             queue, 
+            //             &pipeline_buffers.spatial_lookup_offsets_buffer, 
+            //             particle_count
+            //         );
+            //         print_spatial_lookup_offsets(spatial_lookup_offsets, particle_count);
+            //         let densities = read_particle_densities_from_gpu(
+            //             device, 
+            //             queue, 
+            //             &pipeline_buffers.particle_densities_buffer, 
+            //             particle_count
+            //         );
+            //         if self.frame_count % 10 == 0
+            //         {
+            //             print_densities(densities, self.frame_count);
+            //         }
+            //     }
+            // }
             //println!("END DEBUG NODE");
             }
         Ok(())
@@ -88,6 +90,35 @@ impl ParticleDebugNode {
             particle_system: QueryState::new(world),
             frame_count: 0,
         }
+    }
+}
+
+fn print_config(config: ParticleConfig)
+{
+    println!("particle_count: {}", config.particle_count);
+    println!("particle_size: {}", config.particle_size);
+    println!("smoothing_radius: {}", config.smoothing_radius);
+    println!("max_energy: {}", config.max_energy);
+
+    println!("damping_factor: {}", config.damping_factor);
+    println!("pad1: {}", config.pad1);
+    println!("pad2: {}", config.pad2);
+    println!("pad3: {}", config.pad3);
+
+    println!("delta_time: {}", config.delta_time);
+    println!("fixed_delta_time: {}", config.fixed_delta_time);
+    println!("frame_count: {}", config.frame_count);
+    println!("gravity: {}", config.gravity);
+
+    println!("target_density: {}", config.target_density);
+    println!("pressure_multiplier: {}", config.pressure_multiplier);
+    println!("viscocity_strength: {}", config.viscocity_strength);
+    println!("near_density_multiplier: {}", config.near_density_multiplier);
+
+    println!("screen_bounds: {:?}", config.screen_bounds);
+    println!("view_proj:");
+    for row in &config.view_proj {
+        println!("{:?}", row);
     }
 }
 

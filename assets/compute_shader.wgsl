@@ -49,7 +49,7 @@ var<uniform> config: Config;
 var<uniform> sorting_params: SortingParams;
 
 @group(0) @binding(3) 
-var<storage, read_write> spatial_lookup: array<vec2<u32>>;
+var<storage, read_write> spatial_lookup: array<vec2<u32>>;  // cell key, particle index
 
 @group(0) @binding(4) 
 var<storage, read_write> spatial_lookup_offsets: array<u32>;
@@ -63,6 +63,7 @@ var<storage, read_write> predicted_positions: array<vec2<f32>>;
 /* --------------------------------- CONSTANTS ---------------------------------*/
 const PI: f32 = 3.14159;
 const SHADER_DELAY: u32 = 5u;
+const WORKGROUP_SIZE: u32 = 64u;
 
 /* --------------------------------- MISC FUNCTIONS ---------------------------------*/
 fn check_screen_bounds(i: u32) 
@@ -72,14 +73,29 @@ fn check_screen_bounds(i: u32)
     let y_min = config.screen_bounds[2];
     let y_max = config.screen_bounds[3];
 
-    let pos = particles[i].position;
+    var pos = particles[i].position;
+    var vel = particles[i].velocity;
 
-    if (pos.x >= x_max || pos.x <= x_min) {
-        particles[i].velocity.x *= -config.damping_factor;
+    // X bounds
+    if (pos.x <= x_min) {
+        pos.x = x_min;
+        vel.x = abs(vel.x) * config.damping_factor;  // force positive
+    } else if (pos.x >= x_max) {
+        pos.x = x_max;
+        vel.x = -abs(vel.x) * config.damping_factor;  // force negative
     }
-    if (pos.y >= y_max || pos.y <= y_min) {
-        particles[i].velocity.y *= -config.damping_factor;
+
+    // Y bounds
+    if (pos.y <= y_min) {
+        pos.y = y_min;
+        vel.y = abs(vel.y) * config.damping_factor;  // force positive
+    } else if (pos.y >= y_max) {
+        pos.y = y_max;
+        vel.y = -abs(vel.y) * config.damping_factor;  // force negative
     }
+
+    particles[i].position = pos;
+    particles[i].velocity = vel;
 }
 
 fn set_color(i: u32) 
@@ -303,7 +319,7 @@ fn calculate_pressure_force(curr_particle_index: u32) -> vec2<f32>
             let near_pressure = density_to_near_pressure(near_density);
 
             let neighbor_density = particle_densities[other_particle_index][0];
-            if (neighbor_density == 0f) { continue; }
+            //if (neighbor_density == 0f) { continue; }
             let neighbor_near_density = particle_densities[other_particle_index][1];
 
             let neighbor_pressure = density_to_pressure(neighbor_density);
@@ -312,8 +328,18 @@ fn calculate_pressure_force(curr_particle_index: u32) -> vec2<f32>
             let shared_pressure = (pressure + neighbor_pressure) * 0.5;
             let shared_near_pressure = (near_pressure + neighbor_near_pressure) * 0.5;
 
-            pressure_force += (direction * shared_pressure * density_kernel_derivative(distance)) / neighbor_density;
-            pressure_force += (direction * shared_near_pressure * near_density_kernel_derivative(distance)) / neighbor_near_density;
+            // Symmetric SPH formulation
+            let pressure_term = (pressure / (density * density)) + 
+                            (neighbor_pressure / (neighbor_density * neighbor_density));
+            
+            let near_pressure_term = (near_pressure / (density * density)) + 
+                                    (neighbor_near_pressure / (neighbor_density * neighbor_near_density));
+            
+            pressure_force += direction * pressure_term * density_kernel_derivative(distance);
+            pressure_force += direction * near_pressure_term * near_density_kernel_derivative(distance);
+
+            //pressure_force += (direction * shared_pressure * density_kernel_derivative(distance)) / neighbor_density;
+            //pressure_force += (direction * shared_near_pressure * near_density_kernel_derivative(distance)) / neighbor_near_density;
         }
     }
     return pressure_force;
@@ -377,12 +403,12 @@ fn update_particle_density(i: u32)
 
 fn update_particle_positions(i: u32)
 {
-    particles[i].position += particles[i].velocity * config.delta_time;
+    particles[i].position += particles[i].velocity * config.fixed_delta_time;
 }
 
 fn apply_gravity(i: u32)
 {
-    particles[i].velocity += vec2(0.0, -config.gravity) * config.delta_time;
+    particles[i].velocity += vec2(0.0, -config.gravity) * config.fixed_delta_time;
 }
 
 fn update_predicted_positions(i: u32)
@@ -393,13 +419,14 @@ fn update_predicted_positions(i: u32)
 fn apply_pressure_force(i: u32)
 {
     let pressure_force = calculate_pressure_force(i);
-    particles[i].velocity += pressure_force / particle_densities[i][0] * config.delta_time;
+    //particles[i].velocity += pressure_force / particle_densities[i][0] * config.fixed_delta_time;
+    particles[i].velocity += pressure_force * config.fixed_delta_time;
 }
 
 fn apply_viscocity_force(i: u32)
 {
     let viscocity_force = calculate_viscocity(i);
-    particles[i].velocity += viscocity_force * config.viscocity_strength * config.delta_time;
+    particles[i].velocity += viscocity_force * config.viscocity_strength * config.fixed_delta_time;
 }
 
 /* ----------------------------------- ENTRY POINT FUNCTIONS -----------------------------------*/
@@ -418,7 +445,7 @@ fn pre_simulation_step(@builtin(global_invocation_id) id: vec3<u32>) {
     update_particle_density(i);
 }
 
-@compute @workgroup_size(64, 1, 1)
+@compute @workgroup_size(WORKGROUP_SIZE, 1, 1)
 fn simulation_step(@builtin(global_invocation_id) id: vec3<u32>) {
     let i = id.x;
     if (i >= arrayLength(&particles)) {
@@ -438,7 +465,7 @@ fn simulation_step(@builtin(global_invocation_id) id: vec3<u32>) {
     set_color(i);
 }
 
-@compute @workgroup_size(64, 1, 1)
+@compute @workgroup_size(WORKGROUP_SIZE, 1, 1)
 fn bin_particles_in_grid(@builtin(global_invocation_id) id: vec3<u32>)
 {
     let i = id.x;
@@ -453,7 +480,7 @@ fn bin_particles_in_grid(@builtin(global_invocation_id) id: vec3<u32>)
     spatial_lookup_offsets[i] = 0xFFFFFFFFu; // placeholder 
 }
 
-@compute @workgroup_size(64, 1, 1)
+@compute @workgroup_size(WORKGROUP_SIZE, 1, 1)
 fn sort_particles(@builtin(global_invocation_id) id: vec3<u32>) 
 {
     let i = id.x;
@@ -490,7 +517,7 @@ fn sort_particles(@builtin(global_invocation_id) id: vec3<u32>)
     }
 }
 
-@compute @workgroup_size(64, 1, 1)
+@compute @workgroup_size(WORKGROUP_SIZE, 1, 1)
 fn calculate_spatial_lookup_offsets(@builtin(global_invocation_id) id: vec3<u32>)
 {
     let i = id.x;

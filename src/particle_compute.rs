@@ -137,7 +137,7 @@ impl Node for ParticleComputeNode
                                     let dynamic_offset = (iteration * UNIFORM_ALIGNMENT) as u32;
                                     pass.set_bind_group(0, &pipeline_buffers.bind_group, &[dynamic_offset]);
                                     
-                                    let num_workgroups = (num_pairs + 63) / 64;  // 64 threads per workgroup
+                                    let num_workgroups = (num_pairs + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;  // 64 threads per workgroup
                                     pass.dispatch_workgroups(num_workgroups, 1, 1);
                                 } // Pass is dropped here, ensuring completion
                                 iteration += 1;
@@ -146,7 +146,7 @@ impl Node for ParticleComputeNode
                     }
                 }
 
-                // Pass 3: Calcualte grid start idxs
+                // Pass 3: Calculate grid start idxs
                 {
                     let mut pass = render_context.command_encoder()
                         .begin_compute_pass(&ComputePassDescriptor::default());

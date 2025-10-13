@@ -49,9 +49,9 @@ impl Plugin for ParticlePlugin
         let mut render_graph = render_app.world_mut().resource_mut::<RenderGraph>();
 
         // add the node and node edge to the render graph
-        render_graph.add_node(ParticleRenderLabel, render_node);
         render_graph.add_node(ParticleComputeLabel, compute_node);
         render_graph.add_node(ParticleDebugLabel, debug_node);
+        render_graph.add_node(ParticleRenderLabel, render_node);
 
         render_graph.add_node_edge(ParticleComputeLabel, ParticleDebugLabel);
         render_graph.add_node_edge(ParticleDebugLabel, ParticleRenderLabel);

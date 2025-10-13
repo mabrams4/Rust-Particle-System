@@ -8,6 +8,7 @@ use bevy::{
 };
 use rand_distr::{Distribution, Normal};
 use bytemuck::{Pod, Zeroable};
+use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 
 mod particle;
 mod particle_render;
@@ -17,18 +18,19 @@ mod debug;
 mod particle_buffers;
 mod parameter_gui;
 use particle::Particle;
+use parameter_gui::{gui_system, apply_gui_updates, GUIConfig};
 
-const PARTICLE_COUNT: u32 = 30000;
+const PARTICLE_COUNT: u32 = 50000;
 const PARTICLE_SIZE: f32 = 3.0;
 const SMOOTHING_RADIUS: f32 = PARTICLE_SIZE * PARTICLE_SIZE;
 const GRAVITY: f32 = 0.0;
-const TARGET_DENSITY: f32 = 0.01;
+const TARGET_DENSITY: f32 = 0.011;
 const PRESSURE_MULTIPLIER: f32 = 20000.0;
 const NEAR_DENSITY_MULTIPLIER: f32 = 1000.0;
 const VISCOCITY_STRENGTH: f32 = 1.0;
 const DAMPING_FACTOR: f32 = 0.7;
 const FIXED_DELTA_TIME: f32 = 1.0 / 120.0;
-const MAX_ENERGY: f32 = 10000.0;
+const MAX_ENERGY: f32 = 2000.0;
 
 #[derive(ExtractComponent, Component, Default, Clone)]
 pub struct ParticleSystem {
@@ -75,6 +77,23 @@ fn main()
         }))
     //.add_plugins(DefaultPlugins)
     .add_plugins(particle::ParticlePlugin)
+    .add_plugins(EguiPlugin::default())
+
+    .insert_resource(GUIConfig {
+        fixed_delta_time: FIXED_DELTA_TIME,
+        smoothing_radius: SMOOTHING_RADIUS,
+        max_energy: MAX_ENERGY,
+
+        gravity: GRAVITY,
+        damping_factor: DAMPING_FACTOR,
+        target_density: TARGET_DENSITY,
+        pressure_multiplier: PRESSURE_MULTIPLIER,
+        
+        viscocity_strength: VISCOCITY_STRENGTH,
+        near_density_multiplier: NEAR_DENSITY_MULTIPLIER,
+        applied_changes: false,  
+})
+    
 
     .insert_resource(ParticleConfig {
         particle_count: PARTICLE_COUNT,
@@ -103,6 +122,8 @@ fn main()
 
     .add_systems(Startup, setup_camera)
     .add_systems(Update, setup_particles)
+    .add_systems(EguiPrimaryContextPass, gui_system)
+    .add_systems(PreUpdate, apply_gui_updates)
     .add_systems(Update, exit_on_escape)
     .run();
 }
