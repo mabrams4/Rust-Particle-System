@@ -10,6 +10,8 @@ use rand_distr::{Distribution, Normal};
 use bytemuck::{Pod, Zeroable};
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 
+use std::f32::consts::PI;
+
 mod particle;
 mod particle_render;
 mod particle_compute;
@@ -25,15 +27,16 @@ const PARTICLE_SIZE: f32 = 3.0;
 const SMOOTHING_RADIUS: f32 = PARTICLE_SIZE * PARTICLE_SIZE;
 const GRAVITY: f32 = 0.0;
 const TARGET_DENSITY: f32 = 0.011;
-const PRESSURE_MULTIPLIER: f32 = 20000.0;
+const PRESSURE_MULTIPLIER: f32 = 10000.0;
 const NEAR_DENSITY_MULTIPLIER: f32 = 1000.0;
-const VISCOCITY_STRENGTH: f32 = 1.0;
-const DAMPING_FACTOR: f32 = 0.7;
-const FIXED_DELTA_TIME: f32 = 1.0 / 120.0;
+const VISCOCITY_STRENGTH: f32 = 5.0;
+const DAMPING_FACTOR: f32 = 0.1;
+const FIXED_DELTA_TIME: f32 = 1.0 / 100.0;
 const MAX_ENERGY: f32 = 2000.0;
 
 #[derive(ExtractComponent, Component, Default, Clone)]
-pub struct ParticleSystem {
+pub struct ParticleSystem 
+{
     pub particles: Vec<Particle>,
 }
 
@@ -46,14 +49,14 @@ pub struct ParticleConfig {
     pub max_energy: f32,                // 4 bytes
 
     pub damping_factor: f32,            // 4 bytes
-    pub pad1: f32,                      // 4 bytes
-    pub pad2: f32,                      // 4 bytes
-    pub pad3: f32,                      // 4 bytes
-
-    pub delta_time: f32,                // 4 bytes
     pub fixed_delta_time: f32,          // 4 bytes
     pub frame_count: u32,               // 4 bytes
     pub gravity: f32,                   // 4 bytes
+
+    pub density_kernel_norm: f32,       // 4 bytes
+    pub near_density_kernel_norm: f32,  // 4 bytes
+    pub viscocity_kernel_norm: f32,     // 4 bytes
+    pub _padding: f32,                  // 4 bytes
 
     pub target_density: f32,            // 4 bytes
     pub pressure_multiplier: f32,       // 4 bytes
@@ -75,10 +78,36 @@ fn main()
             }),
             ..default()
         }))
-    //.add_plugins(DefaultPlugins)
     .add_plugins(particle::ParticlePlugin)
     .add_plugins(EguiPlugin::default())
 
+    // Actual simulation parameters used in compute shader
+    .insert_resource(ParticleConfig {
+        particle_count: PARTICLE_COUNT,
+        particle_size: PARTICLE_SIZE,
+        smoothing_radius: SMOOTHING_RADIUS,  // Also our grid cell size
+        max_energy: MAX_ENERGY,
+
+        damping_factor: DAMPING_FACTOR,
+        fixed_delta_time: FIXED_DELTA_TIME,
+        frame_count: 0,
+        gravity: GRAVITY,
+
+        density_kernel_norm: 10.0 / (PI * SMOOTHING_RADIUS.powf(5.0)),
+        near_density_kernel_norm: 15.0 / (PI * SMOOTHING_RADIUS.powf(6.0)),
+        viscocity_kernel_norm: 4.0 / (PI * SMOOTHING_RADIUS.powf(8.0)),
+        _padding: 0.0,
+
+        target_density: TARGET_DENSITY,
+        pressure_multiplier: PRESSURE_MULTIPLIER,
+        viscocity_strength: VISCOCITY_STRENGTH,
+        near_density_multiplier: NEAR_DENSITY_MULTIPLIER,
+
+        screen_bounds: [0.0; 4],
+        view_proj: Mat4::IDENTITY.to_cols_array_2d(),
+    })
+    
+    // GUI modifiable sim params
     .insert_resource(GUIConfig {
         fixed_delta_time: FIXED_DELTA_TIME,
         smoothing_radius: SMOOTHING_RADIUS,
@@ -92,38 +121,14 @@ fn main()
         viscocity_strength: VISCOCITY_STRENGTH,
         near_density_multiplier: NEAR_DENSITY_MULTIPLIER,
         applied_changes: false,  
-})
+    })  
+
     
 
-    .insert_resource(ParticleConfig {
-        particle_count: PARTICLE_COUNT,
-        particle_size: PARTICLE_SIZE,
-        smoothing_radius: SMOOTHING_RADIUS,  // Also our grid cell size
-        max_energy: MAX_ENERGY,
-
-        damping_factor: DAMPING_FACTOR,
-        pad1: 0.0,
-        pad2: 0.0,
-        pad3: 0.0,
-
-        screen_bounds: [0.0; 4],
-        view_proj: Mat4::IDENTITY.to_cols_array_2d(),
-
-        delta_time: 0.0,
-        fixed_delta_time: FIXED_DELTA_TIME,
-        frame_count: 0,
-        gravity: GRAVITY,
-
-        target_density: TARGET_DENSITY,
-        pressure_multiplier: PRESSURE_MULTIPLIER,
-        viscocity_strength: VISCOCITY_STRENGTH,
-        near_density_multiplier: NEAR_DENSITY_MULTIPLIER,
-    })
-
     .add_systems(Startup, setup_camera)
-    .add_systems(Update, setup_particles)
-    .add_systems(EguiPrimaryContextPass, gui_system)
     .add_systems(PreUpdate, apply_gui_updates)
+    .add_systems(EguiPrimaryContextPass, gui_system)
+    .add_systems(Update, setup_particles)
     .add_systems(Update, exit_on_escape)
     .run();
 }
@@ -161,7 +166,6 @@ fn setup_particles(
     if !*ran
     {
         *ran = true;
-
 
         // Get and store screen bounds
         if let Some(bounds) = get_screen_bounds(&camera_query) {

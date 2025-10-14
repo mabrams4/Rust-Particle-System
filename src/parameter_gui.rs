@@ -21,19 +21,21 @@ pub struct GUIConfig
     pub applied_changes: bool,          
 }
 
+// create the gui system with sliders for useful sim params
 pub fn gui_system(
     mut contexts: EguiContexts,
     mut gui_config: ResMut<GUIConfig>,
 ) -> Result
 {
     let ctx = contexts.ctx_mut()?;
+    gui_config.applied_changes = false;
     egui::Window::new("Sim Params")
         .collapsible(true)
         .resizable(true)
         .default_pos([ctx.screen_rect().width() - 310.0, 10.0])  // Upper right corner
         .show(ctx, |ui: &mut egui::Ui| {
             let mut changed = false;
-            changed |= ui.add(egui::Slider::new(&mut gui_config.fixed_delta_time, 0.001..=0.01)
+            changed |= ui.add(egui::Slider::new(&mut gui_config.fixed_delta_time, 0.0015..=0.015)
                 .text("Fixed Delta Time")
                 .step_by(0.001)).changed();
             changed |= ui.add(egui::Slider::new(&mut gui_config.gravity, 0.0..=1000.0)
@@ -45,7 +47,7 @@ pub fn gui_system(
             changed |= ui.add(egui::Slider::new(&mut gui_config.smoothing_radius, 0.0..=30.0)
                 .text("Smoothing Radius")
                 .step_by(1.0)).changed();
-            changed |= ui.add(egui::Slider::new(&mut gui_config.max_energy, 100.0..=5000.0)
+            changed |= ui.add(egui::Slider::new(&mut gui_config.max_energy, 1000.0..=10000.0)
                 .text("Max Energy")).changed();
             changed |= ui.add(egui::Slider::new(&mut gui_config.target_density, 0.0..=0.1)
                 .text("Target Density")
@@ -69,16 +71,27 @@ pub fn gui_system(
         });
     Ok(())
 }
+
+use std::f32::consts::PI;
+
+// apply the gui updates
 pub fn apply_gui_updates(
     mut sim_config: ResMut<ParticleConfig>,
     mut gui_config: ResMut<GUIConfig>,
 )
 {
-    if gui_config.applied_changes && gui_config.is_changed() {
+    if gui_config.applied_changes 
+    {
         sim_config.fixed_delta_time = gui_config.fixed_delta_time;
         sim_config.gravity = gui_config.gravity;
         sim_config.damping_factor = gui_config.damping_factor;
+
+        sim_config.density_kernel_norm = 10.0 / (PI * gui_config.smoothing_radius.powf(5.0));
+        sim_config.near_density_kernel_norm = 15.0 / (PI * gui_config.smoothing_radius.powf(6.0));
+        sim_config.viscocity_kernel_norm = 4.0 / (PI * gui_config.smoothing_radius.powf(8.0));
         sim_config.smoothing_radius = gui_config.smoothing_radius;
+
+
         sim_config.max_energy = gui_config.max_energy;
         sim_config.target_density = gui_config.target_density;
         sim_config.pressure_multiplier = gui_config.pressure_multiplier;

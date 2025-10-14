@@ -6,14 +6,14 @@ struct Config {
     max_energy: f32,                // 4 bytes
 
     damping_factor: f32,            // 4 bytes
-    pad1: f32,                      // 4 bytes
-    pad2: f32,                      // 4 bytes
-    pad3: f32,                      // 4 bytes
-
-    delta_time: f32,                // 4 bytes
     fixed_delta_time: f32,          // 4 bytes
     frame_count: u32,               // 4 bytes
     gravity: f32,                   // 4 bytes
+
+    density_kernel_norm: f32,       // 4 bytes
+    near_density_kernel_norm: f32,  // 4 bytes
+    viscocity_kernel_norm: f32,     // 4 bytes
+    _padding: f32,                  // 4 bytes
 
     target_density: f32,            // 4 bytes
     pressure_multiplier: f32,       // 4 bytes
@@ -62,8 +62,8 @@ var<storage, read_write> predicted_positions: array<vec2<f32>>;
 
 /* --------------------------------- CONSTANTS ---------------------------------*/
 const PI: f32 = 3.14159;
-const SHADER_DELAY: u32 = 5u;
 const WORKGROUP_SIZE: u32 = 64u;
+const SHADER_DELAY: u32 = 5u;
 
 /* --------------------------------- MISC FUNCTIONS ---------------------------------*/
 fn check_screen_bounds(i: u32) 
@@ -147,10 +147,8 @@ fn density_kernel(distance: f32) -> f32
     let radius = config.smoothing_radius;
     if (distance >= radius) { return 0f; }
     
-    // Normalization factor for 2D Spiky kernel with power 2
-    let norm = 10f / (PI * pow(radius, 5f));
     let v = radius - distance;
-    return norm * v * v;
+    return config.density_kernel_norm * v * v;
 }
 
 fn density_kernel_derivative(distance: f32) -> f32
@@ -158,9 +156,8 @@ fn density_kernel_derivative(distance: f32) -> f32
     let radius = config.smoothing_radius;
     if (distance >= radius) { return 0f; }
     
-    let norm = 10f / (PI * pow(radius, 5f));
     let v = radius - distance;
-    return -2f * norm * v;
+    return -2f * config.density_kernel_norm * v;
 }
 
 fn near_density_kernel(distance: f32) -> f32
@@ -168,10 +165,8 @@ fn near_density_kernel(distance: f32) -> f32
     let radius = config.smoothing_radius;
     if (distance >= radius) { return 0f; }
     
-    // Normalization factor for 2D Spiky kernel with power 3
-    let norm = 15f / (PI * pow(radius, 6f));
     let v = radius - distance;
-    return norm * v * v * v;
+    return config.near_density_kernel_norm * v * v * v;
 }
 
 fn near_density_kernel_derivative(distance: f32) -> f32
@@ -179,9 +174,8 @@ fn near_density_kernel_derivative(distance: f32) -> f32
     let radius = config.smoothing_radius;
     if (distance >= radius) { return 0f; }
     
-    let norm = 15f / (PI * pow(radius, 6f));
     let v = radius - distance;
-    return -3f * norm * v * v;
+    return -3f * config.near_density_kernel_norm * v * v;
 }
 
 fn viscosity_kernel(distance: f32) -> f32
@@ -189,10 +183,8 @@ fn viscosity_kernel(distance: f32) -> f32
     let radius = config.smoothing_radius;
     if (distance >= radius) { return 0f; }
     
-    // Normalization factor for 2D Poly6 kernel
-    let norm = 4f / (PI * pow(radius, 8f));
     let v = radius * radius - distance * distance;
-    return norm * v * v * v;
+    return config.viscocity_kernel_norm * v * v * v;
 }
 
 /* --------------------------------- CALCULATE FUNCTIONS ---------------------------------*/
@@ -265,6 +257,12 @@ fn calculate_pressure_force(curr_particle_index: u32) -> vec2<f32>
 {
     var pressure_force = vec2(0f, 0f);
 
+    let density = particle_densities[curr_particle_index][0];
+    let near_density = particle_densities[curr_particle_index][1];
+
+    let pressure = density_to_pressure(density);
+    let near_pressure = density_to_near_pressure(near_density);
+
     let x_max = config.screen_bounds[1];
     let y_max = config.screen_bounds[3];
 
@@ -312,14 +310,7 @@ fn calculate_pressure_force(curr_particle_index: u32) -> vec2<f32>
                 direction = vec2(0f, 1f);
             }
 
-            let density = particle_densities[curr_particle_index][0];
-            let near_density = particle_densities[curr_particle_index][1];
-
-            let pressure = density_to_pressure(density);
-            let near_pressure = density_to_near_pressure(near_density);
-
             let neighbor_density = particle_densities[other_particle_index][0];
-            //if (neighbor_density == 0f) { continue; }
             let neighbor_near_density = particle_densities[other_particle_index][1];
 
             let neighbor_pressure = density_to_pressure(neighbor_density);
@@ -337,9 +328,6 @@ fn calculate_pressure_force(curr_particle_index: u32) -> vec2<f32>
             
             pressure_force += direction * pressure_term * density_kernel_derivative(distance);
             pressure_force += direction * near_pressure_term * near_density_kernel_derivative(distance);
-
-            //pressure_force += (direction * shared_pressure * density_kernel_derivative(distance)) / neighbor_density;
-            //pressure_force += (direction * shared_near_pressure * near_density_kernel_derivative(distance)) / neighbor_near_density;
         }
     }
     return pressure_force;
@@ -419,7 +407,6 @@ fn update_predicted_positions(i: u32)
 fn apply_pressure_force(i: u32)
 {
     let pressure_force = calculate_pressure_force(i);
-    //particles[i].velocity += pressure_force / particle_densities[i][0] * config.fixed_delta_time;
     particles[i].velocity += pressure_force * config.fixed_delta_time;
 }
 
@@ -436,7 +423,7 @@ fn pre_simulation_step(@builtin(global_invocation_id) id: vec3<u32>) {
     if (i >= arrayLength(&particles)) {
         return;
     }
-    //if (config.frame_count < SHADER_DELAY) { return; }
+    if (config.frame_count < SHADER_DELAY) { return; }
 
     apply_gravity(i);
     

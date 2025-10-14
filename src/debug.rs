@@ -11,7 +11,7 @@ use crate::{debug::render_graph::NodeRunError, ParticleConfig};
 use crate::ParticleSystem;
 use crate::particle_buffers::GPUPipelineBuffers;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 
 #[derive(RenderLabel, Hash, Debug, Eq, PartialEq, Clone)]
@@ -101,11 +101,7 @@ fn print_config(config: ParticleConfig)
     println!("max_energy: {}", config.max_energy);
 
     println!("damping_factor: {}", config.damping_factor);
-    println!("pad1: {}", config.pad1);
-    println!("pad2: {}", config.pad2);
-    println!("pad3: {}", config.pad3);
 
-    println!("delta_time: {}", config.delta_time);
     println!("fixed_delta_time: {}", config.fixed_delta_time);
     println!("frame_count: {}", config.frame_count);
     println!("gravity: {}", config.gravity);

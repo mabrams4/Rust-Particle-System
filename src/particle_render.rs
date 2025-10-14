@@ -35,15 +35,17 @@ impl FromWorld for ParticleRenderPipeline
         // get shader handle
         let shader_handle = world.resource::<AssetServer>().load("render_shader.wgsl");
         
+        // get bind group layout
         let bind_group_layout = get_bind_group_layout(render_device);
 
         // create the render pipeline and store it in the pipeline cache
         let pipeline_cache = world.resource_mut::<PipelineCache>();
 
+        // queue the render pipeline
         let render_pipeline_id = pipeline_cache.queue_render_pipeline(
             get_render_pipeline_descriptor(&bind_group_layout, &shader_handle)
         );
-        // return the ParticleRenderPipeline object
+
         ParticleRenderPipeline 
         {  
             bind_group_layout,
@@ -67,7 +69,6 @@ impl Node for ParticleRenderNode
         world: &World,
     ) -> Result<(), NodeRunError> 
     {
-        //println!("Running Render Node");
         let pipeline_cache = world.resource::<PipelineCache>();
         let pipeline = world.resource::<ParticleRenderPipeline>();
         let config = world.resource::<ParticleConfig>();
@@ -79,9 +80,10 @@ impl Node for ParticleRenderNode
                 // check if pipeline is ready yet
                 if let Some(render_pipeline_id) = pipeline_cache.get_render_pipeline(pipeline.render_pipeline_id)
                 {
-                    //let particle_system = world.get::<ParticleSystem>(entity).unwrap();
+                    // check if pipeline buffers are ready
                     if let Some(render_pipeline_buffers) = world.get::<GPUPipelineBuffers>(entity)
                     {
+                        // create render pass and set attributes
                         let mut render_pass = RenderContext::begin_tracked_render_pass(
                         render_context, 
                         RenderPassDescriptor
@@ -104,6 +106,7 @@ impl Node for ParticleRenderNode
         Ok(())
     }
 
+    // update ECS state
     fn update(&mut self, world: &mut World) {
         self.particle_system.update_archetypes(world);
         self.view_query.update_archetypes(world);

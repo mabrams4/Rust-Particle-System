@@ -49,20 +49,22 @@ impl FromWorld for ParticleComputePipeline
             get_compute_pipeline_descriptor(&bind_group_layout, &shader_handle, "bin_particles_in_grid")
         );
 
-        // need to sort the array here
+        // need to sort the array of grid cell keys here
         let compute_sort_particles_pipeline_id = pipeline_cache.queue_compute_pipeline(
             get_compute_pipeline_descriptor(&bind_group_layout, &shader_handle, "sort_particles")
         );
 
+        // figure out offsets into spatial lookup buffer
         let compute_spatial_lookup_offsets_pipeline_id = pipeline_cache.queue_compute_pipeline(
             get_compute_pipeline_descriptor(&bind_group_layout, &shader_handle, "calculate_spatial_lookup_offsets")
         );
 
+        // calculate predicted positions and densities
         let compute_pre_sim_step_pipeline_id = pipeline_cache.queue_compute_pipeline(
             get_compute_pipeline_descriptor(&bind_group_layout, &shader_handle, "pre_simulation_step")
         );
 
-        // pipeline for main simulation step
+        // main simulation step
         let compute_sim_step_pipeline_id = pipeline_cache.queue_compute_pipeline(
             get_compute_pipeline_descriptor(&bind_group_layout, &shader_handle, "simulation_step")
         );

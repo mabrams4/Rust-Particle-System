@@ -5,15 +5,15 @@ struct Config {
     max_energy: f32,                // 4 bytes
 
     damping_factor: f32,            // 4 bytes
-    pad1: f32,                      // 4 bytes
-    pad2: f32,                      // 4 bytes
-    pad3: f32,                      // 4 bytes
-
-    delta_time: f32,                // 4 bytes
     fixed_delta_time: f32,          // 4 bytes
     frame_count: u32,               // 4 bytes
     gravity: f32,                   // 4 bytes
 
+    density_kernel_norm: f32,       // 4 bytes
+    near_density_kernel_norm: f32,  // 4 bytes
+    viscocity_kernel_norm: f32,     // 4 bytes
+    _padding: f32,                  // 4 bytes
+    
     target_density: f32,            // 4 bytes
     pressure_multiplier: f32,       // 4 bytes
     viscocity_strength: f32,        // 4 bytes

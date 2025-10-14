@@ -35,7 +35,6 @@ impl Plugin for ParticlePlugin
         app.add_plugins(ExtractResourcePlugin::<ParticleConfig>::default());
 
         // get render app
-
         let render_app = app.sub_app_mut(RenderApp);
         
         render_app.add_systems(Render, prepare_particle_buffers.in_set(RenderSet::Prepare));
@@ -61,6 +60,7 @@ impl Plugin for ParticlePlugin
 
     fn finish(&self, app: &mut App) {
         let render_app = app.sub_app_mut(RenderApp);
+        
         // insert Custom Particle Pipelines into render world
         render_app.init_resource::<ParticleComputePipeline>();
         render_app.init_resource::<ParticleRenderPipeline>();

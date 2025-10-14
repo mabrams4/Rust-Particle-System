@@ -19,11 +19,11 @@ pub struct GPUPipelineBuffers {
     pub bind_group: BindGroup,  // shared between vertex and compute shaders
     pub vertex_buffer: Buffer,
     pub config_buffer: Buffer,
-    pub spatial_lookup_buffer: Buffer,
-    pub spatial_lookup_offsets_buffer: Buffer,
-    pub particle_densities_buffer: Buffer,
-    pub predictied_positions_buffer: Buffer,
-}
+    pub spatial_lookup_buffer: Buffer,          // for debugging
+    pub spatial_lookup_offsets_buffer: Buffer,  // for debugging
+    pub particle_densities_buffer: Buffer,      // for debugging
+    pub predictied_positions_buffer: Buffer,    // for debugging
+} 
 
 #[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable)]
@@ -43,7 +43,6 @@ pub fn prepare_particle_buffers(
     render_pipeline: Res<ParticleRenderPipeline>,
     mut config: ResMut<ParticleConfig>,
     camera_query: Query<&ExtractedView, With<Camera>>,
-    time: Res<Time>,
     mut commands: Commands,
     mut ran: Local<bool>,
 )
@@ -52,6 +51,7 @@ pub fn prepare_particle_buffers(
     {
         *ran = true;
 
+        // config buffer uniform
         let config_buffer = render_device.create_buffer(&BufferDescriptor {
             label: Some("uniform_buffer"),
             size: std::mem::size_of::<ParticleConfig>() as u64,
@@ -63,7 +63,8 @@ pub fn prepare_particle_buffers(
         let config_buffer_size = std::num::NonZeroU64::new(config_buffer_size).unwrap();
 
         if let Ok((entity, particle_system)) = particle_system_query.single() 
-        {
+        {   
+            // particle buffer
             let particles = &particle_system.particles;
 
             let mut byte_buffer = Vec::<u8>::new();
@@ -79,6 +80,7 @@ pub fn prepare_particle_buffers(
             let particle_buffer_size = (std::mem::size_of::<Particle>() * config.particle_count as usize) as u64;
             let particle_buffer_size = std::num::NonZeroU64::new(particle_buffer_size).unwrap();
 
+            // spatial lookup buffer
             let spatial_lookup_buffer = render_device.create_buffer(&BufferDescriptor {
                 label: Some("grid_metadata_buffer"),
                 size: (std::mem::size_of::<u32>() * 2 * config.particle_count.next_power_of_two() as usize) as u64,
@@ -88,7 +90,7 @@ pub fn prepare_particle_buffers(
             let spatial_lookup_buffer_size = spatial_lookup_buffer.size();
             let spatial_lookup_buffer_size = std::num::NonZeroU64::new(spatial_lookup_buffer_size).unwrap();
 
-            // BITONIC MERGE SORT STUFF
+            // bitonic merge sort sorting params uniform buffer (used with dynamic offset)
             let n = config.particle_count;
             let next_pow_2 = n.next_power_of_two();
 
@@ -135,6 +137,7 @@ pub fn prepare_particle_buffers(
             // Write all parameters at once
             render_queue.write_buffer(&sorting_params_buffer, 0, &sorting_buffer_data);
 
+            // spatial lookup offsets buffer
             let spatial_lookup_offsets_buffer = render_device.create_buffer(&BufferDescriptor {
                 label: Some("spatial_lookup_offsets_buffer"),
                 size: (std::mem::size_of::<u32>() * config.particle_count as usize) as u64,
@@ -144,6 +147,7 @@ pub fn prepare_particle_buffers(
             let spatial_lookup_offsets_buffer_size = spatial_lookup_offsets_buffer.size();
             let spatial_lookup_offsets_buffer_size = std::num::NonZeroU64::new(spatial_lookup_offsets_buffer_size).unwrap();
 
+            // particle densities buffer
             let particle_densities_buffer = render_device.create_buffer(&BufferDescriptor {
                 label: Some("particle_densities_buffer"),
                 size: (std::mem::size_of::<f32>() * 2 * config.particle_count as usize) as u64,
@@ -153,6 +157,7 @@ pub fn prepare_particle_buffers(
             let particle_densities_buffer_size = particle_densities_buffer.size();
             let particle_densities_buffer_size = std::num::NonZeroU64::new(particle_densities_buffer_size).unwrap();
 
+            // predicted positions buffer
             let predictied_positions_buffer = render_device.create_buffer(&BufferDescriptor {
                 label: Some("predictied_positions_buffer"),
                 size: (std::mem::size_of::<f32>() * 2 * config.particle_count as usize) as u64,
@@ -199,26 +204,26 @@ pub fn prepare_particle_buffers(
             });
             
             commands.entity(entity).insert(GPUPipelineBuffers 
-                {
-                    bind_group: bind_group,
-                    vertex_buffer: vertex_buffer,
-                    config_buffer: config_buffer,
-                    spatial_lookup_buffer: spatial_lookup_buffer,
-                    spatial_lookup_offsets_buffer: spatial_lookup_offsets_buffer,
-                    particle_densities_buffer: particle_densities_buffer,
-                    predictied_positions_buffer: predictied_positions_buffer,
-                });
+            {
+                bind_group: bind_group,
+                vertex_buffer: vertex_buffer,
+                config_buffer: config_buffer,
+                spatial_lookup_buffer: spatial_lookup_buffer,
+                spatial_lookup_offsets_buffer: spatial_lookup_offsets_buffer,
+                particle_densities_buffer: particle_densities_buffer,
+                predictied_positions_buffer: predictied_positions_buffer,
+            });
         }
     }
     else 
     {
+        // currently hacky for making gui work, update view proj every frame
         if let Ok(view) = camera_query.single() {
             let view_matrix = view.world_from_view.compute_matrix().inverse();
             let view_proj = view.clip_from_view * view_matrix;
             config.view_proj = view_proj.to_cols_array_2d();
         }
         // Update time delta
-        config.delta_time = time.delta().as_secs_f32();
         config.frame_count += 1;
         
         // Update the uniform buffer on the GPU
